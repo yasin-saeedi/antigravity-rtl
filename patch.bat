@@ -11,21 +11,28 @@ if not exist "%PATCH_PY%" set "PATCH_PY=%~dp0patcher.py"
 set "PATCH_JS=%~dp0src\patcher.js"
 if not exist "%PATCH_JS%" set "PATCH_JS=%~dp0patcher.js"
 
-:: 1. Try Python
-where python >nul 2>&1
+:: 1. Try Python (live interpreter test to avoid Windows Store execution alias stubs)
+python -c "import sys" >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
     python "%PATCH_PY%" %*
     goto :end
 )
 
-where py >nul 2>&1
+:: Try Python launcher (py -3 or py)
+py -3 -c "import sys" >nul 2>nul
+if %ERRORLEVEL% EQU 0 (
+    py "%PATCH_PY%" %*
+    goto :end
+)
+
+py -c "import sys" >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
     py "%PATCH_PY%" %*
     goto :end
 )
 
 :: 2. Try Node.js
-where node >nul 2>&1
+node -v >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
     node "%PATCH_JS%" %*
     goto :end
@@ -57,3 +64,4 @@ pause
 exit /b 1
 
 :end
+exit /b %ERRORLEVEL%

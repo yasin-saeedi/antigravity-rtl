@@ -27,5 +27,6 @@ npm-debug.log*
 *.pdb
 dom_inspection*.json
 DOM_Dump*.json
-*.patch.tmp
-
+# Agent workspace & test cache
+.agents/
+.pytest_cache/

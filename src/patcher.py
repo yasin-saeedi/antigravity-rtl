@@ -650,8 +650,40 @@ def extract_file_from_asar(asar_path, target_rel_path):
         f.seek(payload_start + offset)
         return f.read(size).decode('utf-8', errors='ignore')
 
+def get_asar_metadata(asar_path):
+    if not asar_path or not os.path.isfile(asar_path):
+        return None
+    try:
+        mtime = os.path.getmtime(asar_path)
+        pkg_str = extract_file_from_asar(asar_path, "package.json")
+        version_str = "0.0.0"
+        if pkg_str:
+            try:
+                version_str = json.loads(pkg_str).get("version", "0.0.0")
+            except Exception:
+                pass
+        v_parts = []
+        for part in re.split(r'[-+.]', version_str):
+            if part.isdigit():
+                v_parts.append(int(part))
+            else:
+                break
+        while len(v_parts) < 3:
+            v_parts.append(0)
+        version_tuple = tuple(v_parts)
+        preload_str = extract_file_from_asar(asar_path, "dist/preload.js")
+        is_patched = bool(preload_str and "__ANTIGRAVITY_RTL_INJECTED__" in preload_str)
+        return {
+            "version_str": version_str,
+            "version_tuple": version_tuple,
+            "is_patched": is_patched,
+            "mtime": mtime
+        }
+    except Exception:
+        return None
+
 def get_injection_snippet():
-    clean_css = RTL_CSS.replace("`", "\`")
+    clean_css = RTL_CSS.replace("\\", "\\\\").replace("`", "\`")
     return f"""
 /* __ANTIGRAVITY_RTL_INJECTED__ */
 try {{
@@ -796,7 +828,7 @@ try {{
         if (el.matches('pre, pre *, .monaco-editor, .monaco-editor *, .terminal, .terminal-wrapper, [data-testid*="tool"], [data-testid*="collapsible"], button.review-button, button.review-button *, .files-changed-header, .files-changed-header *')) return;
 
         if (el.tagName === 'CODE') {{
-            if (/[؀-ۿ]/.test(el.innerText || el.textContent)) el.setAttribute('dir', 'rtl');
+            if (/[؀-ۿ]/.test(el.textContent || '')) el.setAttribute('dir', 'rtl');
             else el.setAttribute('dir', 'ltr');
             return;
         }}
@@ -804,7 +836,7 @@ try {{
         if (el.classList && el.classList.contains('artifact-card')) {{
             const desc = el.querySelector('.text-secondary-foreground, span.line-clamp-3');
             if (desc) {{
-                const dir = detectSmartDirection(desc.innerText || desc.textContent);
+                const dir = detectSmartDirection(desc.textContent || '');
                 if (dir) desc.setAttribute('dir', dir);
             }}
             return;
@@ -812,19 +844,19 @@ try {{
 
         if ((el.classList && el.classList.contains('line-clamp-3')) || (el.classList && el.classList.contains('text-secondary-foreground'))) {{
             if (el.closest('.artifact-card')) {{
-                const dir = detectSmartDirection(el.innerText || el.textContent);
+                const dir = detectSmartDirection(el.textContent || '');
                 if (dir) el.setAttribute('dir', dir);
                 return;
             }}
         }}
 
         if (el.tagName === 'TABLE') {{
-            const dir = detectSmartDirection(el.innerText || el.textContent);
+            const dir = detectSmartDirection(el.textContent || '');
             if (dir) {{
                 el.setAttribute('dir', dir);
                 const cells = el.querySelectorAll('th, td');
                 for (let i = 0; i < cells.length; i++) {{
-                    const cellDir = detectSmartDirection(cells[i].innerText || cells[i].textContent, dir);
+                    const cellDir = detectSmartDirection(cells[i].textContent || '', dir);
                     if (cellDir) cells[i].setAttribute('dir', cellDir);
                 }}
             }}
@@ -832,7 +864,7 @@ try {{
         }}
 
         if (el.tagName === 'LI') {{
-            const dir = detectSmartDirection(el.innerText || el.textContent);
+            const dir = detectSmartDirection(el.textContent || '');
             if (dir) {{
                 el.setAttribute('dir', dir);
                 const parentList = el.parentElement;
@@ -844,25 +876,25 @@ try {{
         }}
 
         if (el.tagName === 'UL' || el.tagName === 'OL') {{
-            const dir = detectSmartDirection(el.innerText || el.textContent);
+            const dir = detectSmartDirection(el.textContent || '');
             if (dir) el.setAttribute('dir', dir);
             return;
         }}
 
         if (/^(H[1-6]|P|BLOCKQUOTE)$/.test(el.tagName)) {{
-            const dir = detectSmartDirection(el.innerText || el.textContent);
+            const dir = detectSmartDirection(el.textContent || '');
             if (dir) el.setAttribute('dir', dir);
             return;
         }}
 
         if (el.classList && el.classList.contains('whitespace-pre-wrap') && el.closest('[data-testid="user-input-step"]')) {{
-            const dir = detectSmartDirection(el.innerText || el.textContent);
+            const dir = detectSmartDirection(el.textContent || '');
             if (dir) el.setAttribute('dir', dir);
             return;
         }}
 
         if (el.classList && el.classList.contains('leading-relaxed')) {{
-            const dir = detectSmartDirection(el.innerText || el.textContent);
+            const dir = detectSmartDirection(el.textContent || '');
             if (dir) el.setAttribute('dir', dir);
         }}
     }}
@@ -1316,20 +1348,42 @@ def do_patch(antigravity_dir, interactive=False, kill=False):
     if kill and is_antigravity_running():
         close_antigravity()
 
-    # 1. Backup original app.asar
-    if not os.path.isfile(backup_path):
-        print("[*] در حال تهیه نسخه پشتیبان اصلی (app.asar.original_backup)...")
+    # 1. Inspect metadata and backup original app.asar
+    asar_meta = get_asar_metadata(asar_path)
+    backup_meta = get_asar_metadata(backup_path) if os.path.isfile(backup_path) else None
+
+    # Detect if app.asar is a fresh official release (unpatched and newer than or equal to backup)
+    is_official_update = False
+    if asar_meta and not asar_meta["is_patched"]:
+        if not backup_meta:
+            is_official_update = True
+        elif asar_meta["version_tuple"] > backup_meta["version_tuple"]:
+            is_official_update = True
+        elif asar_meta["version_tuple"] == backup_meta["version_tuple"] and asar_meta["mtime"] > backup_meta["mtime"]:
+            is_official_update = True
+        elif asar_meta["mtime"] > backup_meta["mtime"]:
+            is_official_update = True
+
+    if is_official_update or not os.path.isfile(backup_path):
+        ver_info = f" (v{asar_meta['version_str']})" if asar_meta else ""
+        print(f"[*] Updating factory backup with official pristine build{ver_info}...")
         try:
             shutil.copy2(asar_path, backup_path)
             print(f"  [✓] پشتیبان کارخانه با موفقیت ذخیره شد:\n      {backup_path}")
         except Exception as e:
             print(f"[-] خطا در ایجاد فایل پشتیبان: {e}")
             return False
+        source_asar = asar_path
     else:
         print(f"  [i] نسخه پشتیبان اصلی کارخانه موجود است.")
+        if backup_meta and asar_meta and backup_meta["version_tuple"] >= asar_meta["version_tuple"]:
+            source_asar = backup_path
+        elif os.path.isfile(backup_path):
+            source_asar = backup_path
+        else:
+            source_asar = asar_path
 
     # 2. Extract preload and updater
-    source_asar = backup_path if os.path.isfile(backup_path) else asar_path
     preload_code = extract_file_from_asar(source_asar, "dist/preload.js")
     updater_code = extract_file_from_asar(source_asar, "dist/updater.js")
     nsis_code = extract_file_from_asar(source_asar, "node_modules/electron-updater/out/NsisUpdater.js")
@@ -1538,6 +1592,35 @@ def do_restore(antigravity_dir, kill=False):
         print(f"[-] Backup file not found: {backup_path}")
         return False
 
+    asar_meta = get_asar_metadata(asar_path) if os.path.isfile(asar_path) else None
+    backup_meta = get_asar_metadata(backup_path)
+
+    # Prevent restoring over a newer unpatched official release
+    if asar_meta and not asar_meta["is_patched"]:
+        print("[i] app.asar is already clean and unpatched. No restoration needed.")
+        restore_shortcuts(antigravity_dir)
+        try:
+            launcher_exe = os.path.join(antigravity_dir, "AntigravityLauncher.exe")
+            if os.path.isfile(launcher_exe):
+                os.remove(launcher_exe)
+            res_patch = os.path.join(antigravity_dir, "resources", "rtl-patch")
+            if os.path.isdir(res_patch):
+                shutil.rmtree(res_patch, ignore_errors=True)
+            appdata_patch = os.path.join(os.environ.get("APPDATA", ""), "Antigravity", "rtl-patch")
+            if os.path.isdir(appdata_patch):
+                shutil.rmtree(appdata_patch, ignore_errors=True)
+        except Exception:
+            pass
+        return True
+
+    # Prevent silent downgrade if backup is older than current app.asar
+    if asar_meta and backup_meta:
+        if backup_meta["version_tuple"] < asar_meta["version_tuple"]:
+            print(f"[-] ERROR: Restoration aborted to prevent silent application downgrade!")
+            print(f"    Current application: v{asar_meta['version_str']}")
+            print(f"    Outdated backup:     v{backup_meta['version_str']}")
+            return False
+
     if kill and is_antigravity_running():
         close_antigravity()
 
@@ -1733,22 +1816,24 @@ def main():
 
     target_dir = find_antigravity_path(custom_path)
     if not target_dir:
-        print_banner()
-        print("[-] Antigravity installation path could not be detected automatically.")
-        try:
-            inp = input("Please enter Antigravity installation directory manually (or press Enter to exit): ").strip()
-            if inp:
-                target_dir = find_antigravity_path(inp)
-        except Exception:
-            pass
+        if sys.stdin.isatty():
+            print_banner()
+            print("[-] Antigravity installation path could not be detected automatically.")
+            try:
+                inp = input("Please enter Antigravity installation directory manually (or press Enter to exit): ").strip()
+                if inp:
+                    target_dir = find_antigravity_path(inp)
+            except Exception:
+                pass
 
     if not target_dir:
         print("[-] Error: Cannot proceed without a valid Antigravity installation path.")
         sys.exit(1)
 
-    kill = "--kill" in sys.argv
+    no_kill = "--no-kill" in sys.argv
+    kill = ("--kill" in sys.argv) and not no_kill
 
-    if "2" in sys.argv or "--restore" in sys.argv or "-r" in sys.argv:
+    if any(x in sys.argv for x in ["2", "--restore", "-r"]):
         print_banner()
         print(f"[OK] Detected Antigravity path:\n     {target_dir}\n")
         do_restore(target_dir, kill=kill)
@@ -1756,7 +1841,8 @@ def main():
             launch_antigravity(target_dir)
         return
 
-    if "1" in sys.argv or "--apply" in sys.argv or "-a" in sys.argv:
+    is_apply = any(x in sys.argv for x in ["1", "--apply", "-a", "--no-kill"])
+    if is_apply or not sys.stdin.isatty():
         print_banner()
         print(f"[OK] Detected Antigravity path:\n     {target_dir}\n")
         success = do_patch(target_dir, interactive=False, kill=kill)

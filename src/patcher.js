@@ -403,12 +403,15 @@ function isRunning() {
     }
 }
 
+function sleepSync(ms) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
 function closeAntigravity() {
     console.log('[*] در حال بستن فرآیندهای در حال اجرای Antigravity...');
     try {
         execSync('taskkill /F /IM Antigravity.exe /T', { stdio: 'ignore' });
-        const start = Date.now();
-        while (Date.now() - start < 1500) {}
+        sleepSync(1500);
     } catch (e) {}
 }
 
@@ -534,6 +537,58 @@ function extractFromAsar(asarPath, targetRelPath) {
     return buf.toString('utf8');
 }
 
+function getAsarMetadata(asarPath) {
+    if (!asarPath || !fs.existsSync(asarPath)) return null;
+    try {
+        const mtime = fs.statSync(asarPath).mtimeMs;
+        let versionStr = '0.0.0';
+        try {
+            const pkgStr = extractFromAsar(asarPath, 'package.json');
+            if (pkgStr) {
+                const pkg = JSON.parse(pkgStr);
+                if (pkg.version) versionStr = pkg.version;
+            }
+        } catch (e) {}
+
+        const vParts = [];
+        const parts = versionStr.split(/[-+.]/);
+        for (const part of parts) {
+            if (/^\d+$/.test(part)) {
+                vParts.push(parseInt(part, 10));
+            } else {
+                break;
+            }
+        }
+        while (vParts.length < 3) vParts.push(0);
+
+        let isPatched = false;
+        try {
+            const preloadStr = extractFromAsar(asarPath, 'dist/preload.js');
+            isPatched = Boolean(preloadStr && preloadStr.includes('__ANTIGRAVITY_RTL_INJECTED__'));
+        } catch (e) {}
+
+        return {
+            versionStr,
+            versionParts: vParts,
+            isPatched,
+            mtime
+        };
+    } catch (e) {
+        return null;
+    }
+}
+
+function compareVersions(partsA, partsB) {
+    const len = Math.max(partsA.length, partsB.length);
+    for (let i = 0; i < len; i++) {
+        const a = partsA[i] || 0;
+        const b = partsB[i] || 0;
+        if (a > b) return 1;
+        if (a < b) return -1;
+    }
+    return 0;
+}
+
 function doPatch(targetDir, kill = false) {
     const resourcesDir = path.join(targetDir, 'resources');
     const asarPath = path.join(resourcesDir, 'app.asar');
@@ -549,8 +604,28 @@ function doPatch(targetDir, kill = false) {
         closeAntigravity();
     }
 
-    if (!fs.existsSync(backupPath)) {
-        console.log('[*] در حال تهیه نسخه پشتیبان کارخانه (app.asar.original_backup)...');
+    const asarMeta = getAsarMetadata(asarPath);
+    const backupMeta = fs.existsSync(backupPath) ? getAsarMetadata(backupPath) : null;
+
+    let isOfficialUpdate = false;
+    if (asarMeta && !asarMeta.isPatched) {
+        if (!backupMeta) {
+            isOfficialUpdate = true;
+        } else {
+            const cmp = compareVersions(asarMeta.versionParts, backupMeta.versionParts);
+            if (cmp > 0) {
+                isOfficialUpdate = true;
+            } else if (cmp === 0 && asarMeta.mtime > backupMeta.mtime) {
+                isOfficialUpdate = true;
+            } else if (asarMeta.mtime > backupMeta.mtime) {
+                isOfficialUpdate = true;
+            }
+        }
+    }
+
+    if (isOfficialUpdate || !fs.existsSync(backupPath)) {
+        const verInfo = asarMeta ? ` (v${asarMeta.versionStr})` : '';
+        console.log(`[*] Updating factory backup with official pristine build${verInfo}...`);
         try {
             fs.copyFileSync(asarPath, backupPath);
             console.log(`  [✓] پشتیبان ذخیره شد:\n      ${backupPath}`);
@@ -562,7 +637,20 @@ function doPatch(targetDir, kill = false) {
         console.log('  [i] نسخه پشتیبان اصلی کارخانه موجود است.');
     }
 
-    const sourceAsar = fs.existsSync(backupPath) ? backupPath : asarPath;
+    let sourceAsar = asarPath;
+    if (fs.existsSync(backupPath)) {
+        if (backupMeta && asarMeta) {
+            const cmp = compareVersions(backupMeta.versionParts, asarMeta.versionParts);
+            if (cmp >= 0) {
+                sourceAsar = backupPath;
+            } else {
+                sourceAsar = asarPath;
+            }
+        } else {
+            sourceAsar = backupPath;
+        }
+    }
+
     let preloadCode = extractFromAsar(sourceAsar, 'dist/preload.js');
     let updaterCode = extractFromAsar(sourceAsar, 'dist/updater.js');
     let nsisCode = extractFromAsar(sourceAsar, 'node_modules/electron-updater/out/NsisUpdater.js');
@@ -573,7 +661,7 @@ function doPatch(targetDir, kill = false) {
         return false;
     }
 
-    const cleanCss = RTL_CSS.replace(/`/g, '\\`');
+    const cleanCss = RTL_CSS.replace(/\\/g, '\\\\').replace(/`/g, '\\`');
     const injection = `
 /* __ANTIGRAVITY_RTL_INJECTED__ */
 try {
@@ -717,7 +805,7 @@ try {
         if (el.matches('pre, pre *, .monaco-editor, .monaco-editor *, .terminal, .terminal-wrapper, [data-testid*="tool"], [data-testid*="collapsible"], button.review-button, button.review-button *, .files-changed-header, .files-changed-header *')) return;
 
         if (el.tagName === 'CODE') {
-            if (/[؀-ۿ]/.test(el.innerText || el.textContent)) el.setAttribute('dir', 'rtl');
+            if (/[؀-ۿ]/.test(el.textContent || '')) el.setAttribute('dir', 'rtl');
             else el.setAttribute('dir', 'ltr');
             return;
         }
@@ -725,7 +813,7 @@ try {
         if (el.classList && el.classList.contains('artifact-card')) {
             const desc = el.querySelector('.text-secondary-foreground, span.line-clamp-3');
             if (desc) {
-                const dir = detectSmartDirection(desc.innerText || desc.textContent);
+                const dir = detectSmartDirection(desc.textContent || '');
                 if (dir) desc.setAttribute('dir', dir);
             }
             return;
@@ -733,19 +821,19 @@ try {
 
         if ((el.classList && el.classList.contains('line-clamp-3')) || (el.classList && el.classList.contains('text-secondary-foreground'))) {
             if (el.closest('.artifact-card')) {
-                const dir = detectSmartDirection(el.innerText || el.textContent);
+                const dir = detectSmartDirection(el.textContent || '');
                 if (dir) el.setAttribute('dir', dir);
                 return;
             }
         }
 
         if (el.tagName === 'TABLE') {
-            const dir = detectSmartDirection(el.innerText || el.textContent);
+            const dir = detectSmartDirection(el.textContent || '');
             if (dir) {
                 el.setAttribute('dir', dir);
                 const cells = el.querySelectorAll('th, td');
                 for (let i = 0; i < cells.length; i++) {
-                    const cellDir = detectSmartDirection(cells[i].innerText || cells[i].textContent, dir);
+                    const cellDir = detectSmartDirection(cells[i].textContent || '', dir);
                     if (cellDir) cells[i].setAttribute('dir', cellDir);
                 }
             }
@@ -753,7 +841,7 @@ try {
         }
 
         if (el.tagName === 'LI') {
-            const dir = detectSmartDirection(el.innerText || el.textContent);
+            const dir = detectSmartDirection(el.textContent || '');
             if (dir) {
                 el.setAttribute('dir', dir);
                 const parentList = el.parentElement;
@@ -765,25 +853,25 @@ try {
         }
 
         if (el.tagName === 'UL' || el.tagName === 'OL') {
-            const dir = detectSmartDirection(el.innerText || el.textContent);
+            const dir = detectSmartDirection(el.textContent || '');
             if (dir) el.setAttribute('dir', dir);
             return;
         }
 
         if (/^(H[1-6]|P|BLOCKQUOTE)$/.test(el.tagName)) {
-            const dir = detectSmartDirection(el.innerText || el.textContent);
+            const dir = detectSmartDirection(el.textContent || '');
             if (dir) el.setAttribute('dir', dir);
             return;
         }
 
         if (el.classList && el.classList.contains('whitespace-pre-wrap') && el.closest('[data-testid="user-input-step"]')) {
-            const dir = detectSmartDirection(el.innerText || el.textContent);
+            const dir = detectSmartDirection(el.textContent || '');
             if (dir) el.setAttribute('dir', dir);
             return;
         }
 
         if (el.classList && el.classList.contains('leading-relaxed')) {
-            const dir = detectSmartDirection(el.innerText || el.textContent);
+            const dir = detectSmartDirection(el.textContent || '');
             if (dir) el.setAttribute('dir', dir);
         }
     }
@@ -1312,6 +1400,32 @@ function doRestore(targetDir, kill = false) {
         return false;
     }
 
+    const asarMeta = fs.existsSync(asarPath) ? getAsarMetadata(asarPath) : null;
+    const backupMeta = getAsarMetadata(backupPath);
+
+    if (asarMeta && !asarMeta.isPatched) {
+        console.log('[i] app.asar is already clean and unpatched. No restoration needed.');
+        restoreShortcuts(targetDir);
+        try {
+            const launcherExe = path.join(targetDir, 'AntigravityLauncher.exe');
+            if (fs.existsSync(launcherExe)) fs.unlinkSync(launcherExe);
+            const resPatch = path.join(targetDir, 'resources', 'rtl-patch');
+            if (fs.existsSync(resPatch)) fs.rmdirSync(resPatch, { recursive: true });
+            const appdataPatch = path.join(process.env.APPDATA || '', 'Antigravity', 'rtl-patch');
+            if (fs.existsSync(appdataPatch)) fs.rmdirSync(appdataPatch, { recursive: true });
+        } catch(e) {}
+        return true;
+    }
+
+    if (asarMeta && backupMeta) {
+        if (compareVersions(backupMeta.versionParts, asarMeta.versionParts) < 0) {
+            console.log('[-] ERROR: Restoration aborted to prevent silent application downgrade!');
+            console.log(`    Current application: v${asarMeta.versionStr}`);
+            console.log(`    Outdated backup:     v${backupMeta.versionStr}`);
+            return false;
+        }
+    }
+
     if (kill && isRunning()) closeAntigravity();
 
     console.log('[*] در حال بازگردانی فایل app.asar از نسخه پشتیبان کارخانه...');
@@ -1347,33 +1461,36 @@ function doRestore(targetDir, kill = false) {
 }
 
 function waitForUpdateThenPatch(targetDir) {
-    let installerFound = false;
-    for (let i = 0; i < 15; i++) {
+    const asarPath = path.join(targetDir, 'resources', 'app.asar');
+    let initMtime = 0;
+    try {
+        if (fs.existsSync(asarPath)) initMtime = fs.statSync(asarPath).mtimeMs;
+    } catch (e) {}
+
+    for (let i = 0; i < 45; i++) {
+        sleepSync(2000);
         try {
-            const out = execSync('tasklist /FI "IMAGENAME eq installer.exe"', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-            if (out.toLowerCase().includes('installer.exe')) {
-                installerFound = true;
+            const out = execSync('tasklist', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).toLowerCase();
+            if (out.includes('installer.exe') || out.includes('setup.exe')) {
+                for (let j = 0; j < 60; j++) {
+                    sleepSync(2000);
+                    const out2 = execSync('tasklist', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).toLowerCase();
+                    if (!out2.includes('installer.exe') && !out2.includes('setup.exe')) {
+                        break;
+                    }
+                }
                 break;
             }
-        } catch(e) {}
-        try { execSync('ping 127.0.0.1 -n 3 >nul'); } catch(e) {}
-    }
-
-    if (installerFound) {
-        for (let i = 0; i < 60; i++) {
-            try {
-                const out = execSync('tasklist /FI "IMAGENAME eq installer.exe"', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-                if (!out.toLowerCase().includes('installer.exe')) break;
-            } catch(e) {
-                break;
+            if (fs.existsSync(asarPath)) {
+                const currMtime = fs.statSync(asarPath).mtimeMs;
+                if (currMtime !== initMtime) {
+                    break;
+                }
             }
-            try { execSync('ping 127.0.0.1 -n 3 >nul'); } catch(e) {}
-        }
-    } else {
-        try { execSync('ping 127.0.0.1 -n 6 >nul'); } catch(e) {}
+        } catch (e) {}
     }
 
-    try { execSync('ping 127.0.0.1 -n 4 >nul'); } catch(e) {}
+    sleepSync(3000);
     doPatch(targetDir, false);
 }
 
@@ -1422,24 +1539,26 @@ function main() {
 
     console.log(`[✓] مسیر نصب شناسایی‌شده:\n    ${targetDir}\n`);
 
+    const noKill = args.includes('--no-kill');
+    const kill = args.includes('--kill') && !noKill;
+
     if (args.includes('2') || args.includes('--restore') || args.includes('-r')) {
-        doRestore(targetDir);
+        doRestore(targetDir, kill);
         if (args.includes('--launch')) launchAntigravity(targetDir);
         return;
     }
 
-    const noKill = args.includes('--no-kill');
-
-    if (args.includes('1') || args.includes('--apply') || args.includes('-a')) {
-        const ok = doPatch(targetDir, noKill);
+    const isApply = args.includes('1') || args.includes('--apply') || args.includes('-a') || noKill;
+    if (isApply || !process.stdin.isTTY) {
+        const ok = doPatch(targetDir, kill);
         if (ok && args.includes('--launch')) launchAntigravity(targetDir);
         return;
     }
 
     // Default action: apply patch
-    const ok = doPatch(targetDir, noKill);
-    if (ok) {
-        console.log('\n[i] برای اجرای برنامه کلید اینتر را بزنید.');
+    const ok = doPatch(targetDir, kill);
+    if (ok && args.includes('--launch')) {
+        launchAntigravity(targetDir);
     }
 }
 
