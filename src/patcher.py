@@ -1226,6 +1226,11 @@ try {{
 """
 
 def setup_shortcuts(antigravity_dir, launcher_path):
+    # Never manipulate user shortcuts during automated tests or on mock/temporary directories
+    norm = antigravity_dir.lower().replace('\\', '/')
+    if os.environ.get("PYTEST_CURRENT_TEST") or "tmp" in norm or "temp" in norm or "mock" in norm:
+        return
+
     dest_launcher = os.path.join(antigravity_dir, "AntigravityLauncher.exe")
     try:
         shutil.copy2(launcher_path, dest_launcher)
@@ -1269,6 +1274,10 @@ def setup_shortcuts(antigravity_dir, launcher_path):
         pass
 
 def restore_shortcuts(antigravity_dir):
+    norm = antigravity_dir.lower().replace('\\', '/')
+    if os.environ.get("PYTEST_CURRENT_TEST") or "tmp" in norm or "temp" in norm or "mock" in norm:
+        return
+
     real_exe = os.path.join(antigravity_dir, "Antigravity.exe")
     ps_code = f"""
     $wsh = New-Object -ComObject WScript.Shell
@@ -1301,6 +1310,10 @@ def deploy_permanent_engine(antigravity_dir):
     2. %LOCALAPPDATA%\\Programs\\antigravity\\resources\\rtl-patch
     3. %LOCALAPPDATA%\\Programs\\antigravity\\AntigravityLauncher.exe
     """
+    norm = antigravity_dir.lower().replace('\\', '/')
+    if os.environ.get("PYTEST_CURRENT_TEST") or "tmp" in norm or "temp" in norm or "mock" in norm:
+        return
+
     script_dir = os.path.dirname(os.path.abspath(__file__))
     root_dir = os.path.dirname(script_dir) if os.path.basename(script_dir).lower() == "src" else script_dir
     src_dir = os.path.join(root_dir, "src") if os.path.isdir(os.path.join(root_dir, "src")) else root_dir
