@@ -198,3 +198,52 @@ class TestCssEscapingAndInjection:
         assert len(occurrences) >= 4, (
             f"Expected at least 4 occurrences of escaped selector in evaluated CSS, found {len(occurrences)}"
         )
+
+    def test_offline_embedded_fonts_present_in_css_and_scripts(self):
+        """
+        Verify that src/antigravity-chat-rtl.css, src/patcher.py, and src/patcher.js
+        contain embedded base64 offline fonts (Vazirmatn, Shabnam, Sahel, Samim)
+        and no longer rely on external CDN @import links.
+        """
+        css_file = SRC_DIR / "antigravity-chat-rtl.css"
+        py_file = SRC_DIR / "patcher.py"
+        js_file = SRC_DIR / "patcher.js"
+
+        css_text = css_file.read_text(encoding="utf-8")
+        py_text = py_file.read_text(encoding="utf-8")
+        js_text = js_file.read_text(encoding="utf-8")
+
+        for ftext, fname in [(css_text, "antigravity-chat-rtl.css"), (py_text, "patcher.py"), (js_text, "patcher.js")]:
+            assert "@import url('https://cdn.jsdelivr.net" not in ftext, (
+                f"{fname} must NOT contain external CDN @import links; fonts must be offline embedded."
+            )
+            for family in ["Vazirmatn", "Shabnam", "Sahel", "Samim"]:
+                assert f"font-family: '{family}'" in ftext or f'font-family: "{family}"' in ftext, (
+                    f"{fname} must contain @font-face definition for '{family}'"
+                )
+            assert "data:font/woff2;charset=utf-8;base64," in ftext, (
+                f"{fname} must contain embedded base64 WOFF2 font data."
+            )
+
+    def test_offline_font_files_exist_in_repository(self):
+        """
+        Verify that offline WOFF2 font files exist in both fonts/ and src/fonts/.
+        """
+        required_fonts = [
+            "Vazirmatn-Regular.woff2",
+            "Vazirmatn-Medium.woff2",
+            "Vazirmatn-Bold.woff2",
+            "Shabnam.woff2",
+            "Shabnam-Bold.woff2",
+            "Sahel.woff2",
+            "Sahel-Bold.woff2",
+            "Samim.woff2",
+            "Samim-Bold.woff2",
+        ]
+        for fdir in [PROJECT_ROOT / "fonts", SRC_DIR / "fonts"]:
+            assert fdir.is_dir(), f"Directory {fdir} must exist"
+            for font_name in required_fonts:
+                font_path = fdir / font_name
+                assert font_path.is_file(), f"Font file {font_name} missing in {fdir}"
+                assert font_path.stat().st_size > 10000, f"Font file {font_name} is too small / invalid"
+
