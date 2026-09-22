@@ -39,9 +39,14 @@ body:not(.ag-rtl-disabled) .artifact-card,
 body:not(.ag-rtl-disabled) .artifact-card span,
 body:not(.ag-rtl-disabled) .artifact-card .text-secondary-foreground,
 body:not(.ag-rtl-disabled) [data-testid="user-input-step"] .whitespace-pre-wrap,
-body:not(.ag-rtl-disabled) #conversation [role="article"] p,
-body:not(.ag-rtl-disabled) #conversation [role="article"] li,
-body:not(.ag-rtl-disabled) #conversation [role="article"] blockquote,
+body:not(.ag-rtl-disabled) [data-testid="conversation-view"] p,
+body:not(.ag-rtl-disabled) [data-testid="conversation-view"] li,
+body:not(.ag-rtl-disabled) [data-testid="conversation-view"] blockquote,
+body:not(.ag-rtl-disabled) [role="article"] p,
+body:not(.ag-rtl-disabled) [role="article"] li,
+body:not(.ag-rtl-disabled) [role="article"] blockquote,
+body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"] span,
+body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"] .truncate,
 body:not(.ag-rtl-disabled) div[data-lexical-editor="true"],
 body:not(.ag-rtl-disabled) #antigravity\.agentSidePanelInputBox [contenteditable="true"] {
   font-family: var(--ag-font-family) !important;
@@ -63,19 +68,18 @@ body:not(.ag-rtl-disabled) .leading-relaxed h4 { font-size: var(--ag-font-size) 
 
 /* جهت‌بندی صریح راست‌چین */
 body:not(.ag-rtl-disabled) [dir="rtl"],
-body:not(.ag-rtl-disabled) .leading-relaxed[dir="rtl"],
-body:not(.ag-rtl-disabled) .leading-relaxed [dir="rtl"] {
+body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"][dir="rtl"] {
   direction: rtl !important;
   text-align: right !important;
 }
 
 /* جهت‌بندی صریح چپ‌چین */
-[dir="ltr"],
-.leading-relaxed[dir="ltr"],
-.leading-relaxed [dir="ltr"] {
+body:not(.ag-rtl-disabled) [dir="ltr"],
+body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"][dir="ltr"] {
   direction: ltr !important;
   text-align: left !important;
 }
+
 
 /* مشخصه‌های منطقی برای لیست‌ها و نقل‌قول‌ها در جهت راست‌به‌چپ (خنثی‌سازی کامل pl-10 و pl-4 تیل‌ویند) */
 body:not(.ag-rtl-disabled) ul[dir="rtl"],
@@ -267,13 +271,30 @@ button.review-button,
 button.review-button *,
 .files-changed-header,
 .files-changed-header *,
-button[class*="text-left"],
-button[class*="text-left"] * {
+[data-testid="conversation-view"] button[class*="text-left"],
+[data-testid="conversation-view"] button[class*="text-left"] *,
+[role="article"] button[class*="text-left"],
+[role="article"] button[class*="text-left"] * {
   direction: ltr !important;
   text-align: left !important;
   justify-content: flex-start !important;
   unicode-bidi: isolate !important;
 }
+
+/* عناوین چت‌ها در سایدبار */
+body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"] {
+  font-family: var(--ag-font-family) !important;
+}
+body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"][dir="rtl"] {
+  direction: rtl !important;
+  text-align: right !important;
+}
+body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"][dir="rtl"] span,
+body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"][dir="rtl"] .truncate {
+  direction: rtl !important;
+  text-align: right !important;
+}
+
 
 /* کدهای اینلاین */
 code:not(pre code),

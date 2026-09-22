@@ -66,9 +66,14 @@ body:not(.ag-rtl-disabled) .artifact-card,
 body:not(.ag-rtl-disabled) .artifact-card span,
 body:not(.ag-rtl-disabled) .artifact-card .text-secondary-foreground,
 body:not(.ag-rtl-disabled) [data-testid="user-input-step"] .whitespace-pre-wrap,
-body:not(.ag-rtl-disabled) #conversation [role="article"] p,
-body:not(.ag-rtl-disabled) #conversation [role="article"] li,
-body:not(.ag-rtl-disabled) #conversation [role="article"] blockquote,
+body:not(.ag-rtl-disabled) [data-testid="conversation-view"] p,
+body:not(.ag-rtl-disabled) [data-testid="conversation-view"] li,
+body:not(.ag-rtl-disabled) [data-testid="conversation-view"] blockquote,
+body:not(.ag-rtl-disabled) [role="article"] p,
+body:not(.ag-rtl-disabled) [role="article"] li,
+body:not(.ag-rtl-disabled) [role="article"] blockquote,
+body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"] span,
+body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"] .truncate,
 body:not(.ag-rtl-disabled) div[data-lexical-editor="true"],
 body:not(.ag-rtl-disabled) #antigravity\.agentSidePanelInputBox [contenteditable="true"] {
   font-family: var(--ag-font-family) !important;
@@ -90,16 +95,14 @@ body:not(.ag-rtl-disabled) .leading-relaxed h4 { font-size: var(--ag-font-size) 
 
 /* جهت‌بندی صریح راست‌چین */
 body:not(.ag-rtl-disabled) [dir="rtl"],
-body:not(.ag-rtl-disabled) .leading-relaxed[dir="rtl"],
-body:not(.ag-rtl-disabled) .leading-relaxed [dir="rtl"] {
+body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"][dir="rtl"] {
   direction: rtl !important;
   text-align: right !important;
 }
 
 /* جهت‌بندی صریح چپ‌چین */
-[dir="ltr"],
-.leading-relaxed[dir="ltr"],
-.leading-relaxed [dir="ltr"] {
+body:not(.ag-rtl-disabled) [dir="ltr"],
+body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"][dir="ltr"] {
   direction: ltr !important;
   text-align: left !important;
 }
@@ -294,12 +297,28 @@ button.review-button,
 button.review-button *,
 .files-changed-header,
 .files-changed-header *,
-button[class*="text-left"],
-button[class*="text-left"] * {
+[data-testid="conversation-view"] button[class*="text-left"],
+[data-testid="conversation-view"] button[class*="text-left"] *,
+[role="article"] button[class*="text-left"],
+[role="article"] button[class*="text-left"] * {
   direction: ltr !important;
   text-align: left !important;
   justify-content: flex-start !important;
   unicode-bidi: isolate !important;
+}
+
+/* عناوین چت‌ها در سایدبار */
+body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"] {
+  font-family: var(--ag-font-family) !important;
+}
+body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"][dir="rtl"] {
+  direction: rtl !important;
+  text-align: right !important;
+}
+body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"][dir="rtl"] span,
+body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"][dir="rtl"] .truncate {
+  direction: rtl !important;
+  text-align: right !important;
 }
 
 /* کدهای اینلاین */
@@ -796,28 +815,36 @@ try {{
         if (!hasPersian && !hasLatin) return fallbackDir !== undefined ? fallbackDir : 'rtl';
         if (!hasPersian && hasLatin) return 'ltr';
 
-        let s = trimmed.replace(/^[\s\d٠-٩۰-۹*#\-_+–—•.:,;!?/\|~<>]+/, '');
-        s = s.replace(/^\[[ xX]\]\s*/, '');
+        let s = trimmed.replace(/^[\\s\\d٠-٩۰-۹*#\\-_+–—•.:,;!?/\\|~<>()\\[\\]{{}}]+/, '');
+        s = s.replace(/^\\[[ xX]\\]\\s*/, '');
 
-        const tagMatch = s.match(/^(\([^\)]+\)|\[[^\]]+\]|`[^`]+`|[a-zA-Z0-9_.\-]+\.(?:zip|bat|py|js|ts|css|json|txt|md|exe|sh|html)\s*:?)\s*/);
+        const tagMatch = s.match(/^(\\([^\\)]+\\)|\\[[^\\]]+\\]|`[^`]+`|[a-zA-Z0-9_.\\-]+\\.(?:zip|bat|py|js|ts|css|json|txt|md|exe|sh|html)\\s*:?)\\s*/);
         if (tagMatch) {{
             const afterTag = s.slice(tagMatch[0].length).trim();
             if (/[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/.test(afterTag)) {{
                 return 'rtl';
             }}
+            s = afterTag;
         }}
 
-        const letterMatch = s.match(/[\p{{L}}]/u);
-        if (letterMatch) {{
-            const char = letterMatch[0];
-            if (/[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/.test(char)) return 'rtl';
-            if (/[a-zA-Z]/.test(char)) {{
-                const persianCount = (s.match(/[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/g) || []).length;
-                const latinCount = (s.match(/[a-zA-Z]/g) || []).length;
-                if (persianCount > latinCount * 1.1) return 'rtl';
-                return 'ltr';
+        const firstCharMatch = s.match(/[a-zA-Z؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/);
+        if (firstCharMatch) {{
+            const firstChar = firstCharMatch[0];
+            if (/[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/.test(firstChar)) return 'rtl';
+
+            const tokenMatch = s.match(/^[a-zA-Z0-9_.\\-/:@]+\\s+/);
+            if (tokenMatch) {{
+                const rest = s.slice(tokenMatch[0].length).trim();
+                const restFirst = rest.match(/[a-zA-Z؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/);
+                if (restFirst && /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/.test(restFirst[0])) {{
+                    return 'rtl';
+                }}
             }}
-            if (/[\p{{sc=Arabic}}\p{{sc=Hebrew}}\p{{sc=Syriac}}\p{{sc=Thaana}}]/u.test(char)) return 'rtl';
+
+            const persianWords = (s.match(/[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]{{2,}}/g) || []).length;
+            if (persianWords >= 2) return 'rtl';
+
+            return 'ltr';
         }}
         return 'rtl';
     }}
@@ -826,6 +853,16 @@ try {{
         if (document.body && document.body.classList.contains('ag-rtl-disabled')) return;
         if (!el || el.nodeType !== 1) return;
         if (el.matches('pre, pre *, .monaco-editor, .monaco-editor *, .terminal, .terminal-wrapper, [data-testid*="tool"], [data-testid*="collapsible"], button.review-button, button.review-button *, .files-changed-header, .files-changed-header *')) return;
+
+        if (el.matches && el.matches('[data-testid="conversation-row-sidebar"]')) {{
+            const titleEl = el.querySelector('span.truncate, .truncate');
+            const dir = detectSmartDirection((titleEl ? titleEl.textContent : el.textContent) || '');
+            if (dir) {{
+                el.setAttribute('dir', dir);
+                if (titleEl) titleEl.setAttribute('dir', dir);
+            }}
+            return;
+        }}
 
         if (el.tagName === 'CODE') {{
             if (/[؀-ۿ]/.test(el.textContent || '')) el.setAttribute('dir', 'rtl');
@@ -904,7 +941,7 @@ try {{
         const base = root || document.body;
         if (!base) return;
         applySmartDirectionToElement(base);
-        const selector = 'p, h1, h2, h3, h4, h5, h6, li, ul, ol, blockquote, table, .artifact-card, span.line-clamp-3, [data-testid="user-input-step"] .whitespace-pre-wrap, .leading-relaxed';
+        const selector = 'p, h1, h2, h3, h4, h5, h6, li, ul, ol, blockquote, table, .artifact-card, span.line-clamp-3, [data-testid="user-input-step"] .whitespace-pre-wrap, [data-testid="conversation-row-sidebar"], [data-testid="conversation-view"] p';
         try {{
             const elements = base.querySelectorAll(selector);
             for (let i = 0; i < elements.length; i++) {{
