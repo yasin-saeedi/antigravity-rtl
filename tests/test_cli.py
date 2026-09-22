@@ -263,3 +263,55 @@ class TestCliInterface:
             errors="replace",
         )
         assert proc.returncode == 0, f"Node --no-kill semantics check failed:\n{proc.stderr}"
+
+    def test_install_shortcuts_flag_support_python_and_node(self, tmp_path):
+        """
+        Verify that --install-shortcuts and -s are accepted without error
+        and execute safely in both Python and Node.js patcher.
+        """
+        mock_dir = tmp_path / "shortcuts_test"
+        create_mock_antigravity_dir(mock_dir, version="2.15.0", is_patched=False)
+
+        # Python with --install-shortcuts
+        proc_py = subprocess.run(
+            [sys.executable, str(SRC_DIR / "patcher.py"), "--no-kill", "--install-shortcuts", "--path", str(mock_dir)],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+        )
+        assert proc_py.returncode == 0, f"Python failed with --install-shortcuts: {proc_py.stderr}"
+
+        # Node with --install-shortcuts
+        mock_dir_node = tmp_path / "shortcuts_node"
+        create_mock_antigravity_dir(mock_dir_node, version="2.15.0", is_patched=False)
+
+        proc_node = subprocess.run(
+            ["node", str(SRC_DIR / "patcher.js"), "--no-kill", "--install-shortcuts", "--path", str(mock_dir_node)],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+        )
+        assert proc_node.returncode == 0, f"Node failed with --install-shortcuts: {proc_node.stderr}"
+
+    def test_default_shortcuts_disabled_in_patch_functions(self):
+        """
+        Verify that deploy_permanent_engine and do_patch in patcher.py
+        have install_shortcuts=False by default.
+        """
+        import inspect
+        import patcher
+
+        sig_patch = inspect.signature(patcher.do_patch)
+        assert "install_shortcuts" in sig_patch.parameters, "do_patch must have install_shortcuts parameter"
+        assert sig_patch.parameters["install_shortcuts"].default is False, "do_patch must default install_shortcuts to False"
+
+        sig_deploy = inspect.signature(patcher.deploy_permanent_engine)
+        assert "install_shortcuts" in sig_deploy.parameters, "deploy_permanent_engine must have install_shortcuts parameter"
+        assert sig_deploy.parameters["install_shortcuts"].default is False, "deploy_permanent_engine must default install_shortcuts to False"
+
