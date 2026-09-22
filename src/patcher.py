@@ -1834,6 +1834,26 @@ def launch_antigravity(antigravity_dir):
         except Exception as e:
             print(f"[-] Failed to launch Antigravity: {e}")
 
+def show_diagnostics(target_dir):
+    is_patched, is_running = get_system_status(target_dir)
+    backup = os.path.join(target_dir, "resources", "app.asar.original_backup")
+    port_file = os.path.join(os.environ.get("APPDATA", ""), "Antigravity", "DevToolsActivePort")
+    patch_dir_ok = os.path.isdir(os.path.join(os.environ.get("APPDATA", ""), "Antigravity", "rtl-patch"))
+    shield_ok = os.path.isfile(os.path.join(target_dir, "AntigravityLauncher.exe"))
+
+    short_p = target_dir if len(target_dir) <= 40 else "..." + target_dir[-37:]
+    diag_lines = [
+        f"\033[44;97;1m PATH \033[0m   Installation   : \033[37m{short_p}\033[0m",
+        f"\033[42;30;1m ASAR \033[0m   Package State  : \033[92;1m{'Found & Valid' if os.path.isfile(os.path.join(target_dir, 'resources', 'app.asar')) else 'Not Found'}\033[0m",
+        f"\033[46;30;1m BACK \033[0m   Factory Backup : \033[96;1m{'Healthy (app.asar.original_backup)' if os.path.isfile(backup) else 'Not Found'}\033[0m",
+        f"\033[45;97;1m RTL  \033[0m   Patch Engine   : \033[95;1m{'ACTIVE (Patched)' if is_patched else 'INACTIVE (Original)'}\033[0m",
+        f"\033[42;30;1m SHLD \033[0m   Auto-Shield    : \033[92;1m{'ACTIVE (Protected against updates)' if shield_ok and patch_dir_ok else 'INACTIVE'}\033[0m",
+        f"\033[43;30;1m PROC \033[0m   Process State  : \033[93;1m{'RUNNING (Live Sync Available)' if is_running else 'CLOSED'}\033[0m",
+        f"\033[47;30;1m SYNC \033[0m   DevTools CDP   : \033[97;1m{'Connected (Ready)' if os.path.isfile(port_file) else 'Inactive (restart Antigravity to enable)'}\033[0m"
+    ]
+    print()
+    print(render_shadow_card("DIAGNOSTICS & SYSTEM HEALTH", diag_lines, width=74, border_color="\033[38;2;0;242;254m"))
+
 def interactive_menu(target_dir):
     while True:
         clear_screen()
@@ -1842,9 +1862,9 @@ def interactive_menu(target_dir):
         is_patched, is_running = get_system_status(target_dir)
 
         if is_patched:
-            status_pill = "\033[42;30;1m ACTIVE \033[0m   Patch Status  : \033[92;1mPatched & Live-Enabled\033[0m"
+            status_pill = "\033[42;30;1m PATCHED \033[0m  RTL Engine    : \033[92;1mActive (Smart RTL & Persian Typography)\033[0m"
         else:
-            status_pill = "\033[43;30;1m FACTORY \033[0m  Patch Status  : \033[93;1mOriginal Untouched app.asar\033[0m"
+            status_pill = "\033[43;30;1m ORIGINAL \033[0m RTL Engine    : \033[93;1mStock (Standard LTR Mode)\033[0m"
 
         if is_running:
             proc_pill = "\033[46;30;1m ONLINE \033[0m   Process State : \033[96;1mRunning (CDP Live Sync Ready)\033[0m"
@@ -1868,8 +1888,7 @@ def interactive_menu(target_dir):
         ]
 
         print(render_shadow_card("SYSTEM TELEMETRY", status_lines, width=74, border_color="\033[38;2;0;242;254m"))
-        print()
-        print(render_shadow_card("COMMAND CENTER", action_lines, width=74, border_color="\033[38;2;79;110;247m"))
+        print(render_shadow_card("ACTIONS & COMMANDS", action_lines, width=74, border_color="\033[38;2;0;242;254m"))
         print()
 
         try:
@@ -1879,8 +1898,16 @@ def interactive_menu(target_dir):
             if not choice:
                 choice = "1"
         except (KeyboardInterrupt, EOFError):
-            print(f"\n{CLR_GREEN}Exiting.{CLR_RESET}")
+            print(f"\n{CLR_GREEN}Operation cancelled.{CLR_RESET}\n")
             break
+        except Exception:
+            choice = "1"
+
+        if is_running and choice in ["1", "2", "3"]:
+            try:
+                pass
+            except Exception:
+                pass
 
         def pause_menu():
             try:
@@ -1901,20 +1928,7 @@ def interactive_menu(target_dir):
             do_patch(target_dir, interactive=False, kill=False, install_shortcuts=True)
             pause_menu()
         elif choice == "4":
-            backup = os.path.join(target_dir, "resources", "app.asar.original_backup")
-            port_file = os.path.join(os.environ.get("APPDATA", ""), "Antigravity", "DevToolsActivePort")
-            short_p = target_dir if len(target_dir) <= 40 else "..." + target_dir[-37:]
-            diag_lines = [
-                f"\033[44;97;1m PATH \033[0m   Installation   : \033[37m{short_p}\033[0m",
-                f"\033[42;30;1m ASAR \033[0m   Package State  : \033[92;1m{'Found & Valid' if os.path.isfile(os.path.join(target_dir, 'resources', 'app.asar')) else 'Not Found'}\033[0m",
-                f"\033[46;30;1m BACK \033[0m   Factory Backup : \033[96;1m{'Healthy (app.asar.original_backup)' if os.path.isfile(backup) else 'Not Found'}\033[0m",
-                f"\033[45;97;1m RTL  \033[0m   Patch Engine   : \033[95;1m{'ACTIVE (Patched)' if is_patched else 'INACTIVE (Original)'}\033[0m",
-                f"\033[42;30;1m SHLD \033[0m   Auto-Shield    : \033[92;1m{'ACTIVE (Protected against updates)' if shield_ok and patch_dir_ok else 'INACTIVE'}\033[0m",
-                f"\033[43;30;1m PROC \033[0m   Process State  : \033[93;1m{'RUNNING (Live Sync Available)' if is_running else 'CLOSED'}\033[0m",
-                f"\033[47;30;1m SYNC \033[0m   DevTools CDP   : \033[97;1m{'Connected (Ready)' if os.path.isfile(port_file) else 'Inactive (restart Antigravity to enable)'}\033[0m"
-            ]
-            print()
-            print(render_shadow_card("DIAGNOSTICS & SYSTEM HEALTH", diag_lines, width=74, border_color="\033[38;2;0;242;254m"))
+            show_diagnostics(target_dir)
             pause_menu()
         elif choice in ["0", "exit", "quit", "q"]:
             print(f"\n{CLR_GREEN}Goodbye!{CLR_RESET}\n")
@@ -1962,7 +1976,14 @@ def main():
         print("[-] Error: Cannot proceed without a valid Antigravity installation path.")
         sys.exit(1)
 
-    install_shortcuts = any(x in sys.argv for x in ["--install-shortcuts", "--shortcuts", "-s"])
+    if any(x in sys.argv for x in ["4", "--diagnostics", "--diag"]):
+        print_banner()
+        print(f"[OK] Detected Antigravity path:\n     {target_dir}\n")
+        show_diagnostics(target_dir)
+        return
+
+    is_option_3 = "3" in sys.argv
+    install_shortcuts = any(x in sys.argv for x in ["--install-shortcuts", "--shortcuts", "-s"]) or is_option_3
     no_kill = "--no-kill" in sys.argv
     kill = ("--kill" in sys.argv) and not no_kill
 
@@ -1974,7 +1995,7 @@ def main():
             launch_antigravity(target_dir)
         return
 
-    is_apply = any(x in sys.argv for x in ["1", "--apply", "-a", "--no-kill"])
+    is_apply = any(x in sys.argv for x in ["1", "--apply", "-a", "--no-kill"]) or is_option_3
     if is_apply or not sys.stdin.isatty():
         print_banner()
         print(f"[OK] Detected Antigravity path:\n     {target_dir}\n")

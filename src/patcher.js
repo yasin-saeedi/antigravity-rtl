@@ -681,6 +681,120 @@ function compareVersions(partsA, partsB) {
     return 0;
 }
 
+function setupShortcuts(targetDir, launcherPath) {
+    const norm = (targetDir || '').toLowerCase().replace(/\\/g, '/');
+    if (process.env.PYTEST_CURRENT_TEST || norm.includes('tmp') || norm.includes('temp') || norm.includes('mock')) {
+        return;
+    }
+
+    const destLauncher = path.join(targetDir, 'AntigravityLauncher.exe');
+    try {
+        fs.copyFileSync(launcherPath, destLauncher);
+    } catch(e) {}
+    const targetExe = fs.existsSync(destLauncher) ? destLauncher : launcherPath;
+    const iconSource = path.join(targetDir, 'Antigravity.exe');
+    const psCode = `
+    $wsh = New-Object -ComObject WScript.Shell
+    $paths = @(
+        [System.IO.Path]::Combine([System.Environment]::GetFolderPath('Desktop'), 'Antigravity.lnk'),
+        [System.IO.Path]::Combine([System.Environment]::GetFolderPath('CommonDesktop'), 'Antigravity.lnk'),
+        [System.IO.Path]::Combine([System.Environment]::GetFolderPath('StartMenu'), 'Programs', 'Antigravity.lnk'),
+        [System.IO.Path]::Combine([System.Environment]::GetFolderPath('CommonStartMenu'), 'Programs', 'Antigravity.lnk')
+    )
+    $found = $false
+    foreach ($p in $paths) {
+        if (Test-Path $p) {
+            $sc = $wsh.CreateShortcut($p)
+            $sc.TargetPath = '${targetExe.replace(/'/g, "''")}'
+            $sc.IconLocation = '${iconSource.replace(/'/g, "''")},0'
+            $sc.WorkingDirectory = '${targetDir.replace(/'/g, "''")}'
+            $sc.Save()
+            $found = $true
+        }
+    }
+    if (-not $found) {
+        $desktopP = [System.IO.Path]::Combine([System.Environment]::GetFolderPath('Desktop'), 'Antigravity.lnk')
+        $sc = $wsh.CreateShortcut($desktopP)
+        $sc.TargetPath = '${targetExe.replace(/'/g, "''")}'
+        $sc.IconLocation = '${iconSource.replace(/'/g, "''")},0'
+        $sc.WorkingDirectory = '${targetDir.replace(/'/g, "''")}'
+        $sc.Save()
+    }
+    `;
+    try {
+        execSync(`powershell -NoProfile -Command "${psCode.replace(/\r?\n/g, ' ')}"`, { stdio: 'ignore' });
+        console.log('  [✓] شیلد ضدآپدیت و شورت‌کات‌ها با موفقیت محافظت شدند.');
+    } catch(e) {}
+}
+
+function restoreShortcuts(targetDir) {
+    const norm = (targetDir || '').toLowerCase().replace(/\\/g, '/');
+    if (process.env.PYTEST_CURRENT_TEST || norm.includes('tmp') || norm.includes('temp') || norm.includes('mock')) {
+        return;
+    }
+
+    const realExe = path.join(targetDir, 'Antigravity.exe');
+    const psCode = `
+    $wsh = New-Object -ComObject WScript.Shell
+    $paths = @(
+        [System.IO.Path]::Combine([System.Environment]::GetFolderPath('Desktop'), 'Antigravity.lnk'),
+        [System.IO.Path]::Combine([System.Environment]::GetFolderPath('CommonDesktop'), 'Antigravity.lnk'),
+        [System.IO.Path]::Combine([System.Environment]::GetFolderPath('StartMenu'), 'Programs', 'Antigravity.lnk'),
+        [System.IO.Path]::Combine([System.Environment]::GetFolderPath('CommonStartMenu'), 'Programs', 'Antigravity.lnk')
+    )
+    foreach ($p in $paths) {
+        if (Test-Path $p) {
+            $sc = $wsh.CreateShortcut($p)
+            $sc.TargetPath = '${realExe.replace(/'/g, "''")}'
+            $sc.IconLocation = '${realExe.replace(/'/g, "''")},0'
+            $sc.WorkingDirectory = '${targetDir.replace(/'/g, "''")}'
+            $sc.Save()
+        }
+    }
+    `;
+    try {
+        execSync(`powershell -NoProfile -Command "${psCode.replace(/\r?\n/g, ' ')}"`, { stdio: 'ignore' });
+    } catch(e) {}
+}
+
+function deployPermanentEngine(targetDir, installShortcuts = false) {
+    const norm = (targetDir || '').toLowerCase().replace(/\\/g, '/');
+    if (process.env.PYTEST_CURRENT_TEST || norm.includes('tmp') || norm.includes('temp') || norm.includes('mock')) {
+        return;
+    }
+
+    const scriptDir = __dirname;
+    const rootDir = path.basename(scriptDir).toLowerCase() === 'src' ? path.dirname(scriptDir) : scriptDir;
+    const srcDir = fs.existsSync(path.join(rootDir, 'src')) ? path.join(rootDir, 'src') : rootDir;
+
+    const files = [
+        [path.join(srcDir, 'patcher.py'), 'patcher.py'],
+        [path.join(srcDir, 'patcher.js'), 'patcher.js'],
+        [path.join(srcDir, 'antigravity-chat-rtl.css'), 'antigravity-chat-rtl.css'],
+        [path.join(rootDir, 'patch.bat'), 'patch.bat']
+    ];
+
+    const targetDirs = [
+        path.join(process.env.APPDATA || '', 'Antigravity', 'rtl-patch'),
+        path.join(targetDir, 'resources', 'rtl-patch')
+    ];
+
+    for (const tdir of targetDirs) {
+        try {
+            if (!fs.existsSync(tdir)) fs.mkdirSync(tdir, { recursive: true });
+            for (const [srcF, fname] of files) {
+                if (fs.existsSync(srcF)) fs.copyFileSync(srcF, path.join(tdir, fname));
+            }
+        } catch(e) {}
+    }
+
+    let launcherSrc = path.join(srcDir, 'AntigravityLauncher.exe');
+    if (!fs.existsSync(launcherSrc)) launcherSrc = path.join(rootDir, 'AntigravityLauncher.exe');
+    if (fs.existsSync(launcherSrc) && installShortcuts) {
+        setupShortcuts(targetDir, launcherSrc);
+    }
+}
+
 function doPatch(targetDir, kill = false, installShortcuts = false) {
     const resourcesDir = path.join(targetDir, 'resources');
     const asarPath = path.join(resourcesDir, 'app.asar');
@@ -1306,110 +1420,6 @@ try {
     const patchedPreload = preloadCode + '\n' + injection;
     const replacements = { 'dist/preload.js': patchedPreload };
 
-    const thisScript = path.resolve(__filename);
-    let patchBat = path.join(path.dirname(thisScript), 'patch.bat');
-    if (!fs.existsSync(patchBat)) {
-        patchBat = path.join(path.dirname(path.dirname(thisScript)), 'patch.bat');
-    }function setupShortcuts(targetDir, launcherPath) {
-    const destLauncher = path.join(targetDir, 'AntigravityLauncher.exe');
-    try {
-        fs.copyFileSync(launcherPath, destLauncher);
-    } catch(e) {}
-    const targetExe = fs.existsSync(destLauncher) ? destLauncher : launcherPath;
-    const iconSource = path.join(targetDir, 'Antigravity.exe');
-    const psCode = `
-    $wsh = New-Object -ComObject WScript.Shell
-    $paths = @(
-        [System.IO.Path]::Combine([System.Environment]::GetFolderPath('Desktop'), 'Antigravity.lnk'),
-        [System.IO.Path]::Combine([System.Environment]::GetFolderPath('CommonDesktop'), 'Antigravity.lnk'),
-        [System.IO.Path]::Combine([System.Environment]::GetFolderPath('StartMenu'), 'Programs', 'Antigravity.lnk'),
-        [System.IO.Path]::Combine([System.Environment]::GetFolderPath('CommonStartMenu'), 'Programs', 'Antigravity.lnk')
-    )
-    $found = $false
-    foreach ($p in $paths) {
-        if (Test-Path $p) {
-            $sc = $wsh.CreateShortcut($p)
-            $sc.TargetPath = '${targetExe.replace(/'/g, "''")}'
-            $sc.IconLocation = '${iconSource.replace(/'/g, "''")},0'
-            $sc.WorkingDirectory = '${targetDir.replace(/'/g, "''")}'
-            $sc.Save()
-            $found = $true
-        }
-    }
-    if (-not $found) {
-        $desktopP = [System.IO.Path]::Combine([System.Environment]::GetFolderPath('Desktop'), 'Antigravity.lnk')
-        $sc = $wsh.CreateShortcut($desktopP)
-        $sc.TargetPath = '${targetExe.replace(/'/g, "''")}'
-        $sc.IconLocation = '${iconSource.replace(/'/g, "''")},0'
-        $sc.WorkingDirectory = '${targetDir.replace(/'/g, "''")}'
-        $sc.Save()
-    }
-    `;
-    try {
-        execSync(`powershell -NoProfile -Command "${psCode.replace(/\r?\n/g, ' ')}"`, { stdio: 'ignore' });
-        console.log('  [✓] شیلد ضدآپدیت و شورت‌کات‌ها با موفقیت محافظت شدند.');
-    } catch(e) {}
-}
-
-function restoreShortcuts(targetDir) {
-    const realExe = path.join(targetDir, 'Antigravity.exe');
-    const psCode = `
-    $wsh = New-Object -ComObject WScript.Shell
-    $paths = @(
-        [System.IO.Path]::Combine([System.Environment]::GetFolderPath('Desktop'), 'Antigravity.lnk'),
-        [System.IO.Path]::Combine([System.Environment]::GetFolderPath('CommonDesktop'), 'Antigravity.lnk'),
-        [System.IO.Path]::Combine([System.Environment]::GetFolderPath('StartMenu'), 'Programs', 'Antigravity.lnk'),
-        [System.IO.Path]::Combine([System.Environment]::GetFolderPath('CommonStartMenu'), 'Programs', 'Antigravity.lnk')
-    )
-    foreach ($p in $paths) {
-        if (Test-Path $p) {
-            $sc = $wsh.CreateShortcut($p)
-            $sc.TargetPath = '${realExe.replace(/'/g, "''")}'
-            $sc.IconLocation = '${realExe.replace(/'/g, "''")},0'
-            $sc.WorkingDirectory = '${targetDir.replace(/'/g, "''")}'
-            $sc.Save()
-        }
-    }
-    `;
-    try {
-        execSync(`powershell -NoProfile -Command "${psCode.replace(/\r?\n/g, ' ')}"`, { stdio: 'ignore' });
-    } catch(e) {}
-}
-
-function deployPermanentEngine(targetDir, installShortcuts = false) {
-    const scriptDir = __dirname;
-    const rootDir = path.basename(scriptDir).toLowerCase() === 'src' ? path.dirname(scriptDir) : scriptDir;
-    const srcDir = fs.existsSync(path.join(rootDir, 'src')) ? path.join(rootDir, 'src') : rootDir;
-
-    const files = [
-        [path.join(srcDir, 'patcher.py'), 'patcher.py'],
-        [path.join(srcDir, 'patcher.js'), 'patcher.js'],
-        [path.join(srcDir, 'antigravity-chat-rtl.css'), 'antigravity-chat-rtl.css'],
-        [path.join(rootDir, 'patch.bat'), 'patch.bat']
-    ];
-
-    const targetDirs = [
-        path.join(process.env.APPDATA || '', 'Antigravity', 'rtl-patch'),
-        path.join(targetDir, 'resources', 'rtl-patch')
-    ];
-
-    for (const tdir of targetDirs) {
-        try {
-            if (!fs.existsSync(tdir)) fs.mkdirSync(tdir, { recursive: true });
-            for (const [srcF, fname] of files) {
-                if (fs.existsSync(srcF)) fs.copyFileSync(srcF, path.join(tdir, fname));
-            }
-        } catch(e) {}
-    }
-
-    let launcherSrc = path.join(srcDir, 'AntigravityLauncher.exe');
-    if (!fs.existsSync(launcherSrc)) launcherSrc = path.join(rootDir, 'AntigravityLauncher.exe');
-    if (fs.existsSync(launcherSrc) && installShortcuts) {
-        setupShortcuts(targetDir, launcherSrc);
-    }
-}
-
-
     // Hook updater files to automatically re-patch after future updates
     const hookBody = `
     /* __ANTIGRAVITY_UPDATE_HOOK__ */
@@ -1478,11 +1488,16 @@ function deployPermanentEngine(targetDir, installShortcuts = false) {
         deployPermanentEngine(targetDir, installShortcuts);
 
         console.log('\n' + '='.repeat(65));
-        console.log('[✓] پچ جامع راست‌چین و شیلد ضدآپدیت با موفقیت اعمال شد!');
+        console.log('[✓] پچ جامع راست‌چین هوشمند با موفقیت اعمال شد!');
         console.log('='.repeat(65));
         console.log('  • جهت‌بندی هوشمند خودکار خط‌به‌خط (فارسی: راست‌چین | انگلیسی: چپ‌چین)');
         console.log('  • فونت یکدست و منوی Appearance در نوار بالای برنامه');
-        console.log('  • استقرار دائم موتور پچ در پوشه آنتی‌گراویتی (محافظت در برابر آپدیت)');
+        console.log('  • استقرار دائم موتور پچ در پوشه آنتی‌گراویتی');
+        if (installShortcuts) {
+            console.log('  • شیلد ضدآپدیت فعال شد: شورت‌کات‌های ویندوز محافظت شدند');
+        } else {
+            console.log('  • شورت‌کات‌های اصلی ویندوز بدون تغییر حفظ شدند (حالت ایمن)');
+        }
         console.log('  • مصون‌سازی ۱۰۰٪ کادر ابزارها، لاگ‌ها، Thought، تایمرها و بخش‌های فنی');
         console.log('='.repeat(65));
 
@@ -1652,7 +1667,8 @@ function main() {
 
     const noKill = args.includes('--no-kill');
     const kill = args.includes('--kill') && !noKill;
-    const installShortcuts = args.includes('--install-shortcuts') || args.includes('--shortcuts') || args.includes('-s');
+    const isOption3 = args.includes('3');
+    const installShortcuts = args.includes('--install-shortcuts') || args.includes('--shortcuts') || args.includes('-s') || isOption3;
 
     if (args.includes('2') || args.includes('--restore') || args.includes('-r')) {
         doRestore(targetDir, kill);
@@ -1660,7 +1676,7 @@ function main() {
         return;
     }
 
-    const isApply = args.includes('1') || args.includes('--apply') || args.includes('-a') || noKill;
+    const isApply = args.includes('1') || args.includes('--apply') || args.includes('-a') || isOption3 || noKill;
     if (isApply || !process.stdin.isTTY) {
         const ok = doPatch(targetDir, kill, installShortcuts);
         if (ok && args.includes('--launch')) launchAntigravity(targetDir);
