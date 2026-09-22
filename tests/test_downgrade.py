@@ -176,3 +176,75 @@ class TestDowngradePrevention:
         assert current_pkg["version"] == "2.16.0", (
             "do_restore downgraded the application from v2.16.0 to v2.15.0!"
         )
+
+    def test_do_restore_never_downgrades_newer_official_app_node(self, tmp_path):
+        """
+        Verify Node.js patcher (--restore) does NOT overwrite a newer official app.asar
+        (v2.16.0) with an older backup (v2.15.0).
+        """
+        mock_dir = tmp_path / "restore_safety_node"
+        create_mock_antigravity_dir(
+            mock_dir,
+            version="2.16.0",
+            is_patched=False,
+            include_backup=True,
+            backup_version="2.15.0",
+            backup_mtime_offset=-500.0,
+        )
+
+        res_dir = mock_dir / "resources"
+        asar_path = res_dir / "app.asar"
+
+        # Calling node patcher.js --restore when app.asar is already clean and newer
+        proc = subprocess.run(
+            ["node", str(SRC_DIR / "patcher.js"), "--restore", "--path", str(mock_dir)],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+        )
+        assert proc.returncode == 0, f"Node --restore failed:\n{proc.stderr}"
+
+        # app.asar must still be version 2.16.0!
+        current_pkg = json.loads(patcher.extract_file_from_asar(str(asar_path), "package.json"))
+        assert current_pkg["version"] == "2.16.0", (
+            "Node --restore downgraded the application from v2.16.0 to v2.15.0!"
+        )
+
+    def test_do_restore_recovers_patched_app_node(self, tmp_path):
+        """
+        Verify Node.js patcher (--restore) restores a patched app.asar back to pristine state.
+        """
+        mock_dir = tmp_path / "restore_patched_node"
+        create_mock_antigravity_dir(
+            mock_dir,
+            version="2.15.0",
+            is_patched=True,
+            include_backup=True,
+            backup_version="2.15.0",
+        )
+
+        res_dir = mock_dir / "resources"
+        asar_path = res_dir / "app.asar"
+
+        # Verify it was initially patched
+        initial_preload = patcher.extract_file_from_asar(str(asar_path), "dist/preload.js")
+        assert "__ANTIGRAVITY_RTL_INJECTED__" in initial_preload
+
+        # Run node restore
+        proc = subprocess.run(
+            ["node", str(SRC_DIR / "patcher.js"), "--restore", "--path", str(mock_dir)],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+        )
+        assert proc.returncode == 0, f"Node --restore failed on patched app:\n{proc.stderr}"
+
+        # Verify app is now restored and unpatched
+        restored_preload = patcher.extract_file_from_asar(str(asar_path), "dist/preload.js")
+        assert "__ANTIGRAVITY_RTL_INJECTED__" not in restored_preload

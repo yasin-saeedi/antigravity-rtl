@@ -315,3 +315,55 @@ class TestCliInterface:
         assert "install_shortcuts" in sig_deploy.parameters, "deploy_permanent_engine must have install_shortcuts parameter"
         assert sig_deploy.parameters["install_shortcuts"].default is False, "deploy_permanent_engine must default install_shortcuts to False"
 
+    def test_option_3_cli_argument_python_and_node(self, tmp_path):
+        """
+        Verify that passing '3' as a command-line argument successfully executes
+        in both Python and Node.js patchers.
+        """
+        mock_dir_py = tmp_path / "opt3_py"
+        create_mock_antigravity_dir(mock_dir_py, version="2.15.0", is_patched=False)
+
+        proc_py = subprocess.run(
+            [sys.executable, str(SRC_DIR / "patcher.py"), "3", "--no-kill", "--path", str(mock_dir_py)],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+        )
+        assert proc_py.returncode == 0, f"Python failed with '3': {proc_py.stderr}"
+
+        mock_dir_node = tmp_path / "opt3_node"
+        create_mock_antigravity_dir(mock_dir_node, version="2.15.0", is_patched=False)
+
+        proc_node = subprocess.run(
+            ["node", str(SRC_DIR / "patcher.js"), "3", "--no-kill", "--path", str(mock_dir_node)],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+        )
+        assert proc_node.returncode == 0, f"Node failed with '3': {proc_node.stderr}"
+
+    def test_option_4_and_diagnostics_flag_python(self, tmp_path):
+        """
+        Verify that passing '4' or '--diagnostics' runs system diagnostics and exits cleanly.
+        """
+        mock_dir = tmp_path / "diag_test"
+        create_mock_antigravity_dir(mock_dir, version="2.15.0", is_patched=False)
+
+        proc = subprocess.run(
+            [sys.executable, str(SRC_DIR / "patcher.py"), "4", "--path", str(mock_dir)],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+        )
+        assert proc.returncode == 0, f"Python failed with '4': {proc.stderr}"
+        assert "DIAGNOSTICS & SYSTEM HEALTH" in proc.stdout, "Diagnostics header missing from output"
+

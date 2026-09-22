@@ -6,7 +6,7 @@
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows)](https://microsoft.com)
 [![Python 3.8+](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Node.js 16+](https://img.shields.io/badge/Node.js-16+-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
-[![Tests: 36 Passed](https://img.shields.io/badge/Automated%20Tests-36%20Passed-brightgreen?style=for-the-badge&logo=pytest)](tests/)
+[![Tests: 40 Passed](https://img.shields.io/badge/Automated%20Tests-40%20Passed-brightgreen?style=for-the-badge&logo=pytest)](tests/)
 [![Offline Fonts](https://img.shields.io/badge/Persian%20Fonts-100%25%20Offline-FF6B6B?style=for-the-badge)](fonts/)
 
 **Professional, intelligent bidirectional text direction (RTL/LTR) engine with fully offline embedded Persian fonts and zero-reflow layout architecture for Antigravity IDE.**
@@ -89,7 +89,7 @@ antigravity-rtl/
 │   ├── patcher.js                     # Zero-dependency Node.js patch engine
 │   ├── AntigravityLauncher.exe        # Optional Auto-Shield background launcher
 │   └── fonts/                         # Engine-local font distribution
-├── tests/                             # Enterprise automated test suite (36 tests)
+├── tests/                             # Enterprise automated test suite (40 tests)
 │   ├── test_asar.py                   # 16-byte ASAR header & binary round-trip tests
 │   ├── test_cli.py                    # CLI args, closed-stdin, & shortcut opt-in tests
 │   ├── test_css.py                    # CSS selector escaping & offline font tests
@@ -154,8 +154,9 @@ node src/patcher.js --restore
 
 | Flag | Shorthand | Description |
 |---|---|---|
-| `--install-shortcuts` | `--shortcuts`, `-s` | **Opt-in**: Protects desktop & start menu shortcuts using `AntigravityLauncher.exe` for automatic update healing. Default is disabled (safe mode). |
+| `--install-shortcuts` | `--shortcuts`, `-s`, `3` | **Opt-in**: Protects desktop & start menu shortcuts using `AntigravityLauncher.exe` for automatic update healing. Default is disabled (safe mode). |
 | `--restore` | `-r`, `2` | Fully restores `app.asar` from original factory backup and reverts shortcuts. |
+| `--diagnostics` | `--diag`, `4` | Displays system telemetry, patch status, live CDP port, and installation health check. |
 | `--path <dir>` | `-p <dir>` | Explicitly targets an Antigravity installation path. |
 | `--no-kill` | | Applies the patch without closing running Antigravity processes; synchronizes via live CDP. |
 | `--kill` | | Forces closing Antigravity IDE processes before patching. |
@@ -167,17 +168,17 @@ node src/patcher.js --restore
 
 ## Verification & Automated Test Suite
 
-The project includes an enterprise-grade automated test suite with **36 verified tests** across 5 tiers:
+The project includes an enterprise-grade automated test suite with **40 verified tests** across 5 tiers:
 
 ```powershell
 python run_tests.py
 ```
 
 ### Test Coverage Highlights
-- **Tier 1 (CLI Interface)**: Tests non-interactive execution, closed `stdin` (`DEVNULL`) resilience, `--install-shortcuts` opt-in semantics, and default disabled shortcuts.
+- **Tier 1 (CLI Interface)**: Tests non-interactive execution, closed `stdin` (`DEVNULL`) resilience, `--install-shortcuts` opt-in semantics, option `3` / `4` shortcuts & diagnostics, and default disabled shortcuts.
 - **Tier 2 (CSS & Offline Fonts)**: Validates `#antigravity\\.agentSidePanelInputBox` selector escaping in runtime V8 environments and verifies complete offline Base64 font embedding across all 4 font families.
 - **Tier 3 (ASAR Integrity)**: Tests 16-byte ASAR binary header generation, file extraction, chunked round-trip reconstruction, and cross-engine Python/Node compatibility.
-- **Tier 4 (Downgrade Prevention)**: Proves that restoring an older backup never silently downgrades a newer official application release.
+- **Tier 4 (Downgrade Prevention)**: Proves that restoring an older backup never silently downgrades a newer official application release across both Python and Node.js engines.
 - **Tier 5 (Zero-Reflow Performance)**: Verifies 0 occurrences of synchronous `.innerText` layout thrashing, enforcing non-reflow `.textContent` DOM reads.
 
 ---
