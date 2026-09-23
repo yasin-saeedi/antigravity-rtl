@@ -6,7 +6,7 @@
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows)](https://microsoft.com)
 [![Python 3.8+](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Node.js 16+](https://img.shields.io/badge/Node.js-16+-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
-[![Tests: 40 Passed](https://img.shields.io/badge/Automated%20Tests-40%20Passed-brightgreen?style=for-the-badge&logo=pytest)](tests/)
+[![Tests: 41 Passed](https://img.shields.io/badge/Automated%20Tests-41%20Passed-brightgreen?style=for-the-badge&logo=pytest)](tests/)
 [![Offline Fonts](https://img.shields.io/badge/Persian%20Fonts-100%25%20Offline-FF6B6B?style=for-the-badge)](fonts/)
 
 **Professional, intelligent bidirectional text direction (RTL/LTR) engine with fully offline embedded Persian fonts and zero-reflow layout architecture for Antigravity IDE.**
@@ -29,8 +29,8 @@ Engineered for performance and resilience, it features a dual-engine architectur
 
 ## Key Features & Strengths
 
-### 🎯 Intelligent Bidirectional Engine (Smart RTL)
-- **Granular Block & Paragraph Inspection**: Evaluates text direction per-element (messages, paragraphs, list items, headers, and prompts) using the First Strong Directional Character algorithm.
+### 🎯 Intelligent Bidirectional Engine (Smart RTL with 70% Letter Ratio)
+- **Letter-Only Density Ratio**: Strips punctuation, symbols, and digits to analyze purely alphabetical characters. Lines are rendered LTR only if Latin letters constitute $\ge 70\%$ of all letters, guaranteeing that Persian sentences with English terms, package names, or commands remain perfectly aligned to the right.
 - **Flawless Bilingual Rendering**: Persian sentences align to the right with proper punctuation placement, while English technical phrases, inline code, and symbols remain perfectly oriented.
 
 ### 📦 100% Offline Embedded Typography
@@ -168,7 +168,7 @@ node src/patcher.js --restore
 
 ## Verification & Automated Test Suite
 
-The project includes an enterprise-grade automated test suite with **40 verified tests** across 5 tiers:
+The project includes an enterprise-grade automated test suite with **41 verified tests** across 5 tiers:
 
 ```powershell
 python run_tests.py
@@ -193,9 +193,9 @@ python run_tests.py
 
 ### قابلیت‌های برجسته
 
-1. **جهت‌بندی هوشمند و خودکار (Smart Dynamic RTL)**:
-   - تشخیص خودکار جهت متن خط‌به‌خط و پاراگراف‌به‌پاراگراف.
-   - جملات فارسی راست‌چین و متون انگلیسی، متغیرها و کدهای داخل متن چپ‌چین باقی می‌مانند.
+1. **جهت‌بندی هوشمند با فرمول نسبت ۷۰ درصدی حروف (70% Letter Ratio)**:
+   - حذف کامل اعداد، علائم نگارشی و کاراکترهای خاص در هنگام تحلیل متن و محاسبه خالص نسبت حروف.
+   - خطوط متنی تنها در صورتی چپ‌چین (LTR) می‌شوند که حداقل ۷۰٪ از کل حروف، الفبای انگلیسی باشند؛ در نتیجه جملات فارسی که با کلمات انگلیسی، نام متغیرها، پکیج‌ها یا دستورات طولانی شروع می‌شوند با قطعیت کامل راست‌چین (RTL) باقی می‌مانند.
 
 2. **فونت‌های ۱۰۰٪ آفلاین تعبیه‌شده (بدون نیاز به اینترنت)**:
    - تمامی فونت‌ها (شامل **وزیرمتن** در ۳ وزن، **شبنم**، **ساحل** و **صمیم**) به صورت فایل‌های بهینه‌سازی‌شده WOFF2 در پروژه ذخیره شده و از طریق کدهای Base64 مستقیماً درون استایل تعبیه شده‌اند.

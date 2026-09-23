@@ -141,6 +141,7 @@ body:not(.ag-rtl-disabled) [dir="rtl"],
 body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"][dir="rtl"] {
   direction: rtl !important;
   text-align: right !important;
+  unicode-bidi: isolate !important;
 }
 
 /* جهت‌بندی صریح چپ‌چین */
@@ -204,6 +205,15 @@ body:not(.ag-rtl-disabled) [dir="rtl"] blockquote {
   padding-left: 0 !important;
   margin-right: 0 !important;
   margin-left: 0 !important;
+}
+
+body:not(.ag-rtl-disabled) blockquote[dir="rtl"] p,
+body:not(.ag-rtl-disabled) .leading-relaxed blockquote[dir="rtl"] p,
+body:not(.ag-rtl-disabled) [dir="rtl"] blockquote p,
+body:not(.ag-rtl-disabled) [dir="rtl"] > p {
+  direction: rtl !important;
+  text-align: right !important;
+  unicode-bidi: isolate !important;
 }
 
 blockquote[dir="ltr"],
@@ -329,8 +339,8 @@ pre *,
 [role="article"] pre *,
 [role="article"] [class*="code-line"],
 [role="article"] [class*="code-block"],
-[aria-label="Agent response"] > div:first-child,
-[aria-label="Agent response"] > div:first-child *,
+[aria-label="Agent response"] > div.relative:has(button),
+[aria-label="Agent response"] > div.relative:has(button) *,
 [data-testid*="collapsible"],
 [data-testid*="collapsible"] *,
 [data-testid*="tool"],
@@ -370,7 +380,7 @@ body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"][dir="rtl"] .
 code:not(pre code),
 [role="article"] code:not(pre code) {
   font-size: calc(var(--ag-font-size) * 0.9) !important;
-  display: inline-block !important;
+  display: inline !important;
   unicode-bidi: isolate !important;
 }
 

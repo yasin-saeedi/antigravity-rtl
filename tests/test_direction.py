@@ -92,3 +92,35 @@ class TestSmartDirectionDetection:
         assert '[data-testid="conversation-row-sidebar"]' in snippet, (
             'processAllSmartRTL selector must include [data-testid="conversation-row-sidebar"]'
         )
+
+    def test_70_percent_ratio_threshold(self):
+        snippet = patcher.get_injection_snippet()
+        ratio_cases = [
+            # Under 70% Latin: should be RTL
+            ("Docker container در حال اجراست.", "rtl"),
+            ("Antigravity IDE یک ابزار فوق‌العاده است.", "rtl"),
+            ("این یک متن با 12345 عدد و علائم: !@#$%^&*() است.", "rtl"),
+            # Over 70% Latin: should be LTR
+            ("This is an English sentence that mentions کاربر once.", "ltr"),
+            ("The quick brown fox jumps over the lazy dog و گربه.", "ltr"),
+        ]
+
+        eval_script = """
+        const snippetCode = """ + json.dumps(snippet) + """;
+        const cases = """ + json.dumps([c[0] for c in ratio_cases]) + """;
+
+        const match = snippetCode.match(new RegExp("function\\\\s+detectSmartDirection[\\\\s\\\\S]*?(?=\\\\s*function\\\\s+applySmartDirectionToElement)"));
+        if (!match) {
+            console.error("Failed to find detectSmartDirection in snippet");
+            process.exit(1);
+        }
+        const fn = new Function('return (' + match[0] + ')')();
+        const results = cases.map(c => fn(c));
+        console.log(JSON.stringify(results));
+        """
+
+        stdout = run_node_eval(eval_script)
+        results = json.loads(stdout)
+        expected = [c[1] for c in ratio_cases]
+        assert results == expected, f"Ratio mismatch: {list(zip(ratio_cases, results))}"
+
