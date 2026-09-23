@@ -168,6 +168,7 @@ body:not(.ag-rtl-disabled) [dir="rtl"],
 body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"][dir="rtl"] {
   direction: rtl !important;
   text-align: right !important;
+  unicode-bidi: isolate !important;
 }
 
 /* جهت‌بندی صریح چپ‌چین */
@@ -175,6 +176,7 @@ body:not(.ag-rtl-disabled) [dir="ltr"],
 body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"][dir="ltr"] {
   direction: ltr !important;
   text-align: left !important;
+  unicode-bidi: isolate !important;
 }
 
 
@@ -231,6 +233,15 @@ body:not(.ag-rtl-disabled) [dir="rtl"] blockquote {
   padding-left: 0 !important;
   margin-right: 0 !important;
   margin-left: 0 !important;
+}
+
+body:not(.ag-rtl-disabled) blockquote[dir="rtl"] p,
+body:not(.ag-rtl-disabled) .leading-relaxed blockquote[dir="rtl"] p,
+body:not(.ag-rtl-disabled) [dir="rtl"] blockquote p,
+body:not(.ag-rtl-disabled) [dir="rtl"] > p {
+  direction: rtl !important;
+  text-align: right !important;
+  unicode-bidi: isolate !important;
 }
 
 blockquote[dir="ltr"],
@@ -356,8 +367,8 @@ pre *,
 [role="article"] pre *,
 [role="article"] [class*="code-line"],
 [role="article"] [class*="code-block"],
-[aria-label="Agent response"] > div:first-child,
-[aria-label="Agent response"] > div:first-child *,
+[aria-label="Agent response"] > div.relative:has(button),
+[aria-label="Agent response"] > div.relative:has(button) *,
 [data-testid*="collapsible"],
 [data-testid*="collapsible"] *,
 [data-testid*="tool"],
@@ -397,7 +408,7 @@ body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"][dir="rtl"] .
 code:not(pre code),
 [role="article"] code:not(pre code) {
   font-size: calc(var(--ag-font-size) * 0.9) !important;
-  display: inline-block !important;
+  display: inline !important;
   unicode-bidi: isolate !important;
 }
 
@@ -874,48 +885,35 @@ try {{
         }}
     }}
 
-    // --- Smart Direction Subsystem ---
+    // --- Smart Direction Subsystem (70% Latin Threshold & Letter-Only Counting) ---
     function detectSmartDirection(text, fallbackDir) {{
         if (!text) return null;
         const trimmed = text.trim();
         if (!trimmed) return null;
 
-        const hasPersian = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/.test(trimmed);
-        const hasLatin = /[a-zA-Z]/.test(trimmed);
+        const latinMatches = trimmed.match(/[a-zA-Z]/g);
+        const latinCount = latinMatches ? latinMatches.length : 0;
 
-        if (hasPersian && !hasLatin) return 'rtl';
-        if (!hasPersian && !hasLatin) return fallbackDir !== undefined ? fallbackDir : 'rtl';
-        if (!hasPersian && hasLatin) return 'ltr';
+        const persianMatches = trimmed.match(/[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/g);
+        const persianCount = persianMatches ? persianMatches.length : 0;
 
-        let s = trimmed.replace(/^[\\s\\d٠-٩۰-۹*#\\-_+–—•.:,;!?/\\|~<>()\\[\\]{{}}]+/, '');
-        s = s.replace(/^\\[[ xX]\\]\\s*/, '');
-
-        const tagMatch = s.match(/^(\\([^\\)]+\\)|\\[[^\\]]+\\]|`[^`]+`|[a-zA-Z0-9_.\\-]+\\.(?:zip|bat|py|js|ts|css|json|txt|md|exe|sh|html)\\s*:?)\\s*/);
-        if (tagMatch) {{
-            const afterTag = s.slice(tagMatch[0].length).trim();
-            if (/[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/.test(afterTag)) {{
-                return 'rtl';
-            }}
-            s = afterTag;
+        const totalLetters = latinCount + persianCount;
+        if (totalLetters === 0) {{
+            return fallbackDir !== undefined ? fallbackDir : 'rtl';
         }}
 
-        const firstCharMatch = s.match(/[a-zA-Z؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/);
-        if (firstCharMatch) {{
-            const firstChar = firstCharMatch[0];
-            if (/[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/.test(firstChar)) return 'rtl';
+        if (persianCount === 0) return 'ltr';
+        if (latinCount === 0) return 'rtl';
 
-            const tokenMatch = s.match(/^[a-zA-Z0-9_.\\-/:@]+\\s+/);
-            if (tokenMatch) {{
-                const rest = s.slice(tokenMatch[0].length).trim();
-                const restFirst = rest.match(/[a-zA-Z؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/);
-                if (restFirst && /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/.test(restFirst[0])) {{
-                    return 'rtl';
-                }}
-            }}
+        // If the first alphabetic letter is Persian, it is always a Persian sentence (RTL)
+        const firstLetterMatch = trimmed.match(/[a-zA-Z؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/);
+        if (firstLetterMatch && /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/.test(firstLetterMatch[0])) {{
+            return 'rtl';
+        }}
 
-            const persianWords = (s.match(/[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]{{2,}}/g) || []).length;
-            if (persianWords >= 2) return 'rtl';
-
+        // When starting with Latin or symbols: only LTR if Latin letters are >= 70% of all letters
+        const latinRatio = latinCount / totalLetters;
+        if (latinRatio >= 0.7) {{
             return 'ltr';
         }}
         return 'rtl';
@@ -976,6 +974,11 @@ try {{
             const dir = detectSmartDirection(el.textContent || '');
             if (dir) {{
                 el.setAttribute('dir', dir);
+                const ps = el.querySelectorAll('p');
+                for (let i = 0; i < ps.length; i++) {{
+                    const pDir = detectSmartDirection(ps[i].textContent || '', dir);
+                    if (pDir) ps[i].setAttribute('dir', pDir);
+                }}
                 const parentList = el.parentElement;
                 if (parentList && (parentList.tagName === 'UL' || parentList.tagName === 'OL')) {{
                     if (!parentList.getAttribute('dir')) parentList.setAttribute('dir', dir);
@@ -990,7 +993,20 @@ try {{
             return;
         }}
 
-        if (/^(H[1-6]|P|BLOCKQUOTE)$/.test(el.tagName)) {{
+        if (el.tagName === 'BLOCKQUOTE') {{
+            const dir = detectSmartDirection(el.textContent || '');
+            if (dir) {{
+                el.setAttribute('dir', dir);
+                const ps = el.querySelectorAll('p');
+                for (let i = 0; i < ps.length; i++) {{
+                    const pDir = detectSmartDirection(ps[i].textContent || '', dir);
+                    if (pDir) ps[i].setAttribute('dir', pDir);
+                }}
+            }}
+            return;
+        }}
+
+        if (/^H[1-6]|P$/.test(el.tagName)) {{
             const dir = detectSmartDirection(el.textContent || '');
             if (dir) el.setAttribute('dir', dir);
             return;
@@ -1107,7 +1123,10 @@ try {{
                 <!-- RTL Toggle -->
                 <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.03); padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.06);">
                     <div>
-                        <div style="font-size: 13px; font-weight: 500; color: #fff;">راست‌چین هوشمند (RTL)</div>
+                        <div style="font-size: 13px; font-weight: 500; color: #fff; display: flex; align-items: center; gap: 6px;">
+                            <span>راست‌چین هوشمند (RTL)</span>
+                            <span id="ag-rtl-status-badge" style="font-size: 10px; padding: 1px 6px; border-radius: 4px; background: ${{currentSettings.rtlEnabled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(161, 161, 170, 0.2)'}}; color: ${{currentSettings.rtlEnabled ? '#4ade80' : '#a1a1aa'}};">${{currentSettings.rtlEnabled ? 'فعال' : 'غیرفعال'}}</span>
+                        </div>
                         <div style="font-size: 11px; color: #a1a1aa; margin-top: 2px;">متن‌های فارسی، پنل‌ها و کادر تایپ</div>
                     </div>
                     <div id="ag-toggle-rtl" style="width: 44px; height: 24px; background: ${{currentSettings.rtlEnabled ? '#3b82f6' : '#3f3f46'}}; border-radius: 12px; position: relative; cursor: pointer; transition: background .2s;">
@@ -1173,10 +1192,16 @@ try {{
 
             const toggleBtn = popoverInstance.querySelector('#ag-toggle-rtl');
             const knob = popoverInstance.querySelector('#ag-toggle-knob');
+            const statusBadge = popoverInstance.querySelector('#ag-rtl-status-badge');
             toggleBtn.onclick = () => {{
                 currentSettings.rtlEnabled = !currentSettings.rtlEnabled;
                 toggleBtn.style.background = currentSettings.rtlEnabled ? '#3b82f6' : '#3f3f46';
                 knob.style.right = currentSettings.rtlEnabled ? '4px' : '22px';
+                if (statusBadge) {{
+                    statusBadge.style.background = currentSettings.rtlEnabled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(161, 161, 170, 0.2)';
+                    statusBadge.style.color = currentSettings.rtlEnabled ? '#4ade80' : '#a1a1aa';
+                    statusBadge.textContent = currentSettings.rtlEnabled ? 'فعال' : 'غیرفعال';
+                }}
                 applySettings(currentSettings);
                 saveSettings(currentSettings);
             }};
