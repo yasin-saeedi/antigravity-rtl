@@ -547,39 +547,67 @@ def get_system_status(target_dir):
     is_running = is_antigravity_running()
     return is_patched, is_running
 
+def _is_valid_antigravity_dir(d):
+    if not d or not os.path.isdir(d):
+        return False
+    asar = os.path.join(d, "resources", "app.asar")
+    if not os.path.isfile(asar):
+        return False
+    exes = ["Antigravity.exe", "antigravity.exe", "antigravity", "Antigravity"]
+    return any(os.path.isfile(os.path.join(d, e)) for e in exes)
+
 def find_antigravity_path(custom_path=None):
     """Detect Antigravity installation directory"""
     if custom_path:
         cp = os.path.abspath(custom_path.strip().strip('"'))
-        asar = os.path.join(cp, "resources", "app.asar")
-        exe = os.path.join(cp, "Antigravity.exe")
-        if os.path.isfile(asar) and os.path.isfile(exe):
+        if _is_valid_antigravity_dir(cp):
             return cp
         if os.path.isfile(cp):
             parent = os.path.dirname(cp)
             if os.path.basename(parent) == "resources":
                 parent = os.path.dirname(parent)
-            asar = os.path.join(parent, "resources", "app.asar")
-            exe = os.path.join(parent, "Antigravity.exe")
-            if os.path.isfile(asar) and os.path.isfile(exe):
+            if _is_valid_antigravity_dir(parent):
                 return parent
 
     candidates = []
 
     # 1. Active running processes
     try:
-        ps_cmd = 'Get-Process Antigravity -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path'
-        res = subprocess.run(['powershell', '-NoProfile', '-Command', ps_cmd], capture_output=True, text=True, timeout=3)
-        if res.returncode == 0 and res.stdout.strip():
+        if sys.platform == "win32":
+            ps_cmd = 'Get-Process Antigravity -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path'
+            res = subprocess.run(['powershell', '-NoProfile', '-Command', ps_cmd], capture_output=True, text=True, timeout=3)
+            if res.returncode == 0 and res.stdout.strip():
+                for line in res.stdout.strip().splitlines():
+                    p = line.strip()
+                    if os.path.isfile(p) and p.lower().endswith("antigravity.exe"):
+                        d = os.path.dirname(p)
+                        if d not in candidates: candidates.append(d)
+        else:
+            res = subprocess.run(['pgrep', '-a', 'antigravity'], capture_output=True, text=True, timeout=3)
             for line in res.stdout.strip().splitlines():
-                p = line.strip()
-                if os.path.isfile(p) and p.lower().endswith("antigravity.exe"):
-                    d = os.path.dirname(p)
-                    if d not in candidates: candidates.append(d)
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    p = parts[1]
+                    if os.path.isfile(p):
+                        d = os.path.dirname(p)
+                        if d not in candidates: candidates.append(d)
     except Exception:
         pass
 
-    # 2. LocalAppData standard installation
+    # 2. Linux / macOS standard paths
+    if sys.platform != "win32":
+        linux_paths = [
+            "/opt/antigravity",
+            "/usr/lib/antigravity",
+            "/usr/local/antigravity",
+            os.path.expanduser("~/.local/share/antigravity"),
+            "/Applications/Antigravity.app/Contents/Resources"
+        ]
+        for lp in linux_paths:
+            if os.path.isdir(lp) and lp not in candidates:
+                candidates.append(lp)
+
+    # 3. LocalAppData standard installation
     local_app_data = os.environ.get("LOCALAPPDATA", "")
     if local_app_data:
         std_path = os.path.join(local_app_data, "Programs", "antigravity")
@@ -632,25 +660,36 @@ def find_antigravity_path(custom_path=None):
             candidates.append(p_roam)
 
     for c in candidates:
-        asar = os.path.join(c, "resources", "app.asar")
-        exe = os.path.join(c, "Antigravity.exe")
-        if os.path.isfile(asar) and os.path.isfile(exe):
+        if _is_valid_antigravity_dir(c):
             return c
 
     return None
 
 def is_antigravity_running():
     try:
-        res = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq Antigravity.exe'], capture_output=True, text=True)
-        return 'antigravity.exe' in res.stdout.lower()
+        if sys.platform == "win32":
+            res = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq Antigravity.exe'], capture_output=True, text=True)
+            return 'antigravity.exe' in res.stdout.lower()
+        else:
+            res = subprocess.run(['pgrep', '-f', '/opt/antigravity/antigravity'], capture_output=True, text=True)
+            if res.returncode == 0 and bool(res.stdout.strip()):
+                return True
+            res2 = subprocess.run(['pgrep', '-x', 'antigravity'], capture_output=True, text=True)
+            return res2.returncode == 0 and bool(res2.stdout.strip())
     except Exception:
         return False
 
 def close_antigravity():
     print("[*] در حال بستن فرآیندهای در حال اجرای Antigravity...")
     try:
-        subprocess.run(['taskkill', '/F', '/IM', 'Antigravity.exe', '/T'], capture_output=True)
-        time.sleep(1.5)
+        if sys.platform == "win32":
+            subprocess.run(['taskkill', '/F', '/IM', 'Antigravity.exe', '/T'], capture_output=True)
+            time.sleep(1.5)
+        else:
+            subprocess.run(['systemctl', '--user', 'stop', 'antigravity-desktop.service'], capture_output=True)
+            time.sleep(1)
+            subprocess.run(['pkill', '-f', '/opt/antigravity/antigravity'], capture_output=True)
+            time.sleep(1)
     except Exception:
         pass
 
@@ -1360,6 +1399,8 @@ try {{
 """
 
 def setup_shortcuts(antigravity_dir, launcher_path):
+    if sys.platform != "win32":
+        return
     # Never manipulate user shortcuts during automated tests or on mock/temporary directories
     norm = antigravity_dir.lower().replace('\\', '/')
     if os.environ.get("PYTEST_CURRENT_TEST") or "tmp" in norm or "temp" in norm or "mock" in norm:
@@ -1408,6 +1449,8 @@ def setup_shortcuts(antigravity_dir, launcher_path):
         pass
 
 def restore_shortcuts(antigravity_dir):
+    if sys.platform != "win32":
+        return
     norm = antigravity_dir.lower().replace('\\', '/')
     if os.environ.get("PYTEST_CURRENT_TEST") or "tmp" in norm or "temp" in norm or "mock" in norm:
         return
@@ -1459,8 +1502,9 @@ def deploy_permanent_engine(antigravity_dir, install_shortcuts=False):
         (os.path.join(root_dir, "patch.bat"), "patch.bat")
     ]
 
+    appdata_dir = os.environ.get("APPDATA") or os.path.expanduser("~/.config")
     target_dirs = [
-        os.path.join(os.environ.get("APPDATA", ""), "Antigravity", "rtl-patch"),
+        os.path.join(appdata_dir, "Antigravity", "rtl-patch"),
         os.path.join(antigravity_dir, "resources", "rtl-patch")
     ]
 
@@ -1650,7 +1694,7 @@ def try_sync_live_window(action="restore"):
     Synchronizes the live open window without restarting Antigravity.
     """
     try:
-        appdata = os.environ.get("APPDATA", "")
+        appdata = os.environ.get("APPDATA") or os.path.expanduser("~/.config")
         port_file = os.path.join(appdata, "Antigravity", "DevToolsActivePort")
         if not os.path.isfile(port_file):
             return False
@@ -1851,19 +1895,33 @@ def wait_for_update_then_patch(antigravity_dir):
     do_patch(antigravity_dir, interactive=False, kill=False)
 
 def launch_antigravity(antigravity_dir):
-    exe_path = os.path.join(antigravity_dir, "Antigravity.exe")
-    if os.path.isfile(exe_path):
-        print(f"[*] Launching Antigravity IDE...")
+    if sys.platform == "win32":
+        exe_path = os.path.join(antigravity_dir, "Antigravity.exe")
+        if os.path.isfile(exe_path):
+            print(f"[*] Launching Antigravity IDE...")
+            try:
+                subprocess.Popen([exe_path], cwd=antigravity_dir, close_fds=True)
+            except Exception as e:
+                print(f"[-] Failed to launch Antigravity: {e}")
+    else:
+        print("[*] Launching Antigravity IDE (Linux)...")
         try:
-            subprocess.Popen([exe_path], cwd=antigravity_dir, close_fds=True)
+            res = subprocess.run(['systemctl', '--user', 'is-enabled', 'antigravity-desktop.service'], capture_output=True, text=True)
+            if res.returncode == 0:
+                subprocess.run(['systemctl', '--user', 'start', 'antigravity-desktop.service'])
+            else:
+                exe = os.path.join(antigravity_dir, "antigravity")
+                if os.path.isfile(exe):
+                    subprocess.Popen([exe], cwd=antigravity_dir, close_fds=True)
         except Exception as e:
             print(f"[-] Failed to launch Antigravity: {e}")
 
 def show_diagnostics(target_dir):
     is_patched, is_running = get_system_status(target_dir)
     backup = os.path.join(target_dir, "resources", "app.asar.original_backup")
-    port_file = os.path.join(os.environ.get("APPDATA", ""), "Antigravity", "DevToolsActivePort")
-    patch_dir_ok = os.path.isdir(os.path.join(os.environ.get("APPDATA", ""), "Antigravity", "rtl-patch"))
+    appdata = os.environ.get("APPDATA") or os.path.expanduser("~/.config")
+    port_file = os.path.join(appdata, "Antigravity", "DevToolsActivePort")
+    patch_dir_ok = os.path.isdir(os.path.join(appdata, "Antigravity", "rtl-patch"))
     shield_ok = os.path.isfile(os.path.join(target_dir, "AntigravityLauncher.exe"))
 
     short_p = target_dir if len(target_dir) <= 40 else "..." + target_dir[-37:]
@@ -1901,8 +1959,9 @@ def interactive_menu(target_dir):
 
         status_lines = [status_pill, proc_pill, path_pill]
 
+        appdata = os.environ.get("APPDATA") or os.path.expanduser("~/.config")
         shield_ok = os.path.isfile(os.path.join(target_dir, "AntigravityLauncher.exe"))
-        patch_dir_ok = os.path.isdir(os.path.join(os.environ.get("APPDATA", ""), "Antigravity", "rtl-patch"))
+        patch_dir_ok = os.path.isdir(os.path.join(appdata, "Antigravity", "rtl-patch"))
 
         action_lines = [
             f"\033[42;30;1m 1 \033[0m  \033[97;1mInstall Smart RTL (Safe Default - Shortcuts Preserved)\033[0m  \033[96m>> [SAFE INSTALL]\033[0m",

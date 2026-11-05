@@ -438,16 +438,24 @@ function printBanner() {
 `);
 }
 
+function isValidAntigravityDir(d) {
+    if (!d || !fs.existsSync(d)) return false;
+    const asar = path.join(d, 'resources', 'app.asar');
+    if (!fs.existsSync(asar)) return false;
+    const exes = ['Antigravity.exe', 'antigravity.exe', 'antigravity', 'Antigravity'];
+    return exes.some(e => fs.existsSync(path.join(d, e)));
+}
+
 function findAntigravityPath(customPath) {
     if (customPath) {
         let cp = path.resolve(customPath.trim().replace(/^"|"$/g, ''));
-        if (fs.existsSync(path.join(cp, 'resources', 'app.asar')) && fs.existsSync(path.join(cp, 'Antigravity.exe'))) {
+        if (isValidAntigravityDir(cp)) {
             return cp;
         }
         if (fs.existsSync(cp) && fs.statSync(cp).isFile()) {
             let parent = path.dirname(cp);
             if (path.basename(parent) === 'resources') parent = path.dirname(parent);
-            if (fs.existsSync(path.join(parent, 'resources', 'app.asar')) && fs.existsSync(path.join(parent, 'Antigravity.exe'))) {
+            if (isValidAntigravityDir(parent)) {
                 return parent;
             }
         }
@@ -457,25 +465,55 @@ function findAntigravityPath(customPath) {
 
     // 1. Running processes
     try {
-        const psCmd = 'Get-Process Antigravity -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path';
-        const out = execSync(`powershell -NoProfile -Command "${psCmd}"`, { encoding: 'utf8', timeout: 3000 });
-        for (const line of out.split(/\r?\n/)) {
-            const p = line.trim();
-            if (p && p.toLowerCase().endsWith('antigravity.exe') && fs.existsSync(p)) {
-                const d = path.dirname(p);
-                if (!candidates.includes(d)) candidates.push(d);
+        if (process.platform === 'win32') {
+            const psCmd = 'Get-Process Antigravity -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path';
+            const out = execSync(`powershell -NoProfile -Command "${psCmd}"`, { encoding: 'utf8', timeout: 3000 });
+            for (const line of out.split(/\r?\n/)) {
+                const p = line.trim();
+                if (p && p.toLowerCase().endsWith('antigravity.exe') && fs.existsSync(p)) {
+                    const d = path.dirname(p);
+                    if (!candidates.includes(d)) candidates.push(d);
+                }
+            }
+        } else {
+            const out = execSync('pgrep -a antigravity || true', { encoding: 'utf8', timeout: 3000 });
+            for (const line of out.split(/\r?\n/)) {
+                const parts = line.trim().split(/\s+/);
+                if (parts.length >= 2) {
+                    const p = parts[1];
+                    if (fs.existsSync(p)) {
+                        const d = path.dirname(p);
+                        if (!candidates.includes(d)) candidates.push(d);
+                    }
+                }
             }
         }
     } catch (e) {}
 
-    // 2. LocalAppData standard installation
+    // 2. Linux / macOS standard paths
+    if (process.platform !== 'win32') {
+        const linuxPaths = [
+            '/opt/antigravity',
+            '/usr/lib/antigravity',
+            '/usr/local/antigravity',
+            path.join(process.env.HOME || '', '.local', 'share', 'antigravity'),
+            '/Applications/Antigravity.app/Contents/Resources'
+        ];
+        for (const lp of linuxPaths) {
+            if (fs.existsSync(lp) && !candidates.includes(lp)) {
+                candidates.push(lp);
+            }
+        }
+    }
+
+    // 3. LocalAppData standard installation
     const localAppData = process.env.LOCALAPPDATA || '';
     if (localAppData) {
         const stdPath = path.join(localAppData, 'Programs', 'antigravity');
         if (!candidates.includes(stdPath)) candidates.push(stdPath);
     }
 
-    // 3. Program Files
+    // 4. Program Files
     for (const pf of [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.ProgramW6432]) {
         if (pf) {
             candidates.push(path.join(pf, 'Antigravity'));
@@ -483,14 +521,14 @@ function findAntigravityPath(customPath) {
         }
     }
 
-    // 4. Roaming AppData
+    // 5. Roaming AppData
     const roaming = process.env.APPDATA || '';
     if (roaming) {
         candidates.push(path.join(roaming, 'Programs', 'antigravity'));
     }
 
     for (const c of candidates) {
-        if (fs.existsSync(path.join(c, 'resources', 'app.asar')) && fs.existsSync(path.join(c, 'Antigravity.exe'))) {
+        if (isValidAntigravityDir(c)) {
             return c;
         }
     }
@@ -499,8 +537,13 @@ function findAntigravityPath(customPath) {
 
 function isRunning() {
     try {
-        const out = execSync('tasklist /FI "IMAGENAME eq Antigravity.exe"', { encoding: 'utf8' });
-        return out.toLowerCase().includes('antigravity.exe');
+        if (process.platform === 'win32') {
+            const out = execSync('tasklist /FI "IMAGENAME eq Antigravity.exe"', { encoding: 'utf8' });
+            return out.toLowerCase().includes('antigravity.exe');
+        } else {
+            const out = execSync('pgrep -f /opt/antigravity/antigravity || pgrep -x antigravity || true', { encoding: 'utf8' });
+            return Boolean(out.trim());
+        }
     } catch (e) {
         return false;
     }
@@ -513,8 +556,15 @@ function sleepSync(ms) {
 function closeAntigravity() {
     console.log('[*] در حال بستن فرآیندهای در حال اجرای Antigravity...');
     try {
-        execSync('taskkill /F /IM Antigravity.exe /T', { stdio: 'ignore' });
-        sleepSync(1500);
+        if (process.platform === 'win32') {
+            execSync('taskkill /F /IM Antigravity.exe /T', { stdio: 'ignore' });
+            sleepSync(1500);
+        } else {
+            try { execSync('systemctl --user stop antigravity-desktop.service', { stdio: 'ignore' }); } catch(e) {}
+            sleepSync(1000);
+            try { execSync('pkill -f /opt/antigravity/antigravity', { stdio: 'ignore' }); } catch(e) {}
+            sleepSync(1000);
+        }
     } catch (e) {}
 }
 
@@ -693,6 +743,7 @@ function compareVersions(partsA, partsB) {
 }
 
 function setupShortcuts(targetDir, launcherPath) {
+    if (process.platform !== 'win32') return;
     const norm = (targetDir || '').toLowerCase().replace(/\\/g, '/');
     if (process.env.PYTEST_CURRENT_TEST || norm.includes('tmp') || norm.includes('temp') || norm.includes('mock')) {
         return;
@@ -739,6 +790,7 @@ function setupShortcuts(targetDir, launcherPath) {
 }
 
 function restoreShortcuts(targetDir) {
+    if (process.platform !== 'win32') return;
     const norm = (targetDir || '').toLowerCase().replace(/\\/g, '/');
     if (process.env.PYTEST_CURRENT_TEST || norm.includes('tmp') || norm.includes('temp') || norm.includes('mock')) {
         return;
@@ -785,8 +837,9 @@ function deployPermanentEngine(targetDir, installShortcuts = false) {
         [path.join(rootDir, 'patch.bat'), 'patch.bat']
     ];
 
+    const appData = process.env.APPDATA || path.join(process.env.HOME || '', '.config');
     const targetDirs = [
-        path.join(process.env.APPDATA || '', 'Antigravity', 'rtl-patch'),
+        path.join(appData, 'Antigravity', 'rtl-patch'),
         path.join(targetDir, 'resources', 'rtl-patch')
     ];
 
@@ -1646,11 +1699,27 @@ function waitForUpdateThenPatch(targetDir) {
 }
 
 function launchAntigravity(targetDir) {
-    const exe = path.join(targetDir, 'Antigravity.exe');
-    if (fs.existsSync(exe)) {
-        console.log('[*] در حال اجرای Antigravity...');
-        const child = spawn(exe, [], { detached: true, stdio: 'ignore', cwd: targetDir });
-        child.unref();
+    if (process.platform === 'win32') {
+        const exe = path.join(targetDir, 'Antigravity.exe');
+        if (fs.existsSync(exe)) {
+            console.log('[*] در حال اجرای Antigravity...');
+            const child = spawn(exe, [], { detached: true, stdio: 'ignore', cwd: targetDir });
+            child.unref();
+        }
+    } else {
+        console.log('[*] در حال اجرای Antigravity (Linux)...');
+        try {
+            const isEnabled = execSync('systemctl --user is-enabled antigravity-desktop.service || true', { encoding: 'utf8' }).trim();
+            if (isEnabled === 'enabled') {
+                execSync('systemctl --user start antigravity-desktop.service');
+                return;
+            }
+        } catch(e) {}
+        const exe = path.join(targetDir, 'antigravity');
+        if (fs.existsSync(exe)) {
+            const child = spawn(exe, [], { detached: true, stdio: 'ignore', cwd: targetDir });
+            child.unref();
+        }
     }
 }
 
