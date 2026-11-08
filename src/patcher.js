@@ -3,6 +3,8 @@
  * پچ جامع و هوشمند راست‌چین‌سازی چت و تنظیم فونت در آنتی‌گراویتی (نسخه جاوااسکریپت)
  */
 
+process.noAsar = true;
+
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -129,6 +131,7 @@ body:not(.ag-rtl-disabled) [role="article"] blockquote,
 body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"] span,
 body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"] .truncate,
 body:not(.ag-rtl-disabled) div[data-lexical-editor="true"],
+body:not(.ag-rtl-disabled) [data-testid="agent-input-box"] [contenteditable="true"],
 body:not(.ag-rtl-disabled) #antigravity\\.agentSidePanelInputBox [contenteditable="true"] {
   font-family: var(--ag-font-family) !important;
 }
@@ -160,7 +163,6 @@ body:not(.ag-rtl-disabled) [dir="ltr"],
 body:not(.ag-rtl-disabled) [data-testid="conversation-row-sidebar"][dir="ltr"] {
   direction: ltr !important;
   text-align: left !important;
-  unicode-bidi: isolate !important;
 }
 
 
@@ -305,6 +307,7 @@ body:not(.ag-rtl-disabled) .artifact-card span.line-clamp-3[dir="ltr"] {
    ۳. کادر تایپ کاربر (Lexical Editor)
    ========================================================= */
 body:not(.ag-rtl-disabled) div[data-lexical-editor="true"],
+body:not(.ag-rtl-disabled) [data-testid="agent-input-box"] [contenteditable="true"],
 body:not(.ag-rtl-disabled) #antigravity\\.agentSidePanelInputBox [contenteditable="true"] {
   direction: rtl !important;
   text-align: right !important;

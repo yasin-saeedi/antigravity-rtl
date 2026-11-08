@@ -1,0 +1,7 @@
+{
+  "name": "antigravity-rtl",
+  "id": "antigravity-rtl",
+  "displayName": "Antigravity RTL & Persian Typography",
+  "description": "Smart bidirectional text layout, Persian/Arabic auto-direction, and embedded offline fonts for Google Antigravity 2.0.",
+  "version": "2.0.0"
+}

@@ -1,0 +1,8 @@
+{
+  "command": "node",
+  "args": ["../../src/sidecar/index.js"],
+  "restart_policy": "always",
+  "display_name": "RTL & Persian Typography Engine",
+  "description": "Background auto-injection daemon for bidirectional text layout and font rendering.",
+  "has_web_ui": false
+}

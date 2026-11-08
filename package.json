@@ -1,0 +1,26 @@
+{
+  "name": "antigravity-rtl",
+  "version": "2.0.0",
+  "description": "Smart RTL/LTR direction & Persian typography for Google Antigravity 2.0",
+  "type": "module",
+  "bin": {
+    "antigravity-rtl": "bin/cli.js"
+  },
+  "scripts": {
+    "install": "node scripts/install-plugin.js",
+    "uninstall": "node scripts/uninstall-plugin.js",
+    "test": "python run_tests.py"
+  },
+  "keywords": [
+    "antigravity",
+    "rtl",
+    "persian",
+    "farsi",
+    "arabic",
+    "typography",
+    "vazirmatn",
+    "plugin"
+  ],
+  "author": "Yasin Saeedi",
+  "license": "MIT"
+}

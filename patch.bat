@@ -42,18 +42,21 @@ if %ERRORLEVEL% EQU 0 (
 set "ANTIGRAVITY_EXE=%LOCALAPPDATA%\Programs\antigravity\Antigravity.exe"
 if exist "%ANTIGRAVITY_EXE%" (
     set "ELECTRON_RUN_AS_NODE=1"
+    set "ELECTRON_NO_ASAR=1"
     "%ANTIGRAVITY_EXE%" "%PATCH_JS%" %*
     goto :end
 )
 
 if exist "%ProgramFiles%\Antigravity\Antigravity.exe" (
     set "ELECTRON_RUN_AS_NODE=1"
+    set "ELECTRON_NO_ASAR=1"
     "%ProgramFiles%\Antigravity\Antigravity.exe" "%PATCH_JS%" %*
     goto :end
 )
 
 if exist "%ProgramFiles(x86)%\Antigravity\Antigravity.exe" (
     set "ELECTRON_RUN_AS_NODE=1"
+    set "ELECTRON_NO_ASAR=1"
     "%ProgramFiles(x86)%\Antigravity\Antigravity.exe" "%PATCH_JS%" %*
     goto :end
 )
