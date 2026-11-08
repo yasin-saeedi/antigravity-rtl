@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import http from 'http';
+import { execSync } from 'child_process';
 
 const PLUGIN_NAME = 'antigravity-rtl';
 const PLUGINS_DIR = path.join(os.homedir(), '.gemini', 'config', 'plugins');
@@ -14,34 +15,25 @@ export async function uninstall() {
   try {
     const portFile = path.join(process.env.APPDATA || '', 'Antigravity', 'DevToolsActivePort');
     if (fs.existsSync(portFile)) {
-      const [portStr] = fs.readFileSync(portFile, 'utf8').trim().split('\n');
-      const port = parseInt(portStr, 10);
-      if (port) {
-        const targets = await new Promise((resolve) => {
-          http.get(`http://127.0.0.1:${port}/json`, (res) => {
-            let d = '';
-            res.on('data', c => d += c);
-            res.on('end', () => {
-              try { resolve(JSON.parse(d)); } catch { resolve([]); }
-            });
-          }).on('error', () => resolve([]));
+      const port = parseInt(fs.readFileSync(portFile, 'utf8').trim().split('\n')[0], 10);
+      const res = await fetch(`http://127.0.0.1:${port}/json`).then(r => r.json()).catch(() => null);
+      const target = res?.find(t => t.type === 'page' && (t.url?.includes('127.0.0.1') || t.title?.includes('Antigravity') || t.url?.includes('workbench.html')));
+      if (target?.webSocketDebuggerUrl) {
+        const ws = new WebSocket(target.webSocketDebuggerUrl);
+        await new Promise((resolve) => {
+          ws.onopen = resolve;
+          ws.onerror = resolve;
+          setTimeout(resolve, 1500);
         });
-
-        const page = targets.find(t => t.type === 'page' && (t.url?.includes('127.0.0.1') || t.title?.includes('Antigravity') || t.url?.includes('workbench.html')));
-        if (page && page.webSocketDebuggerUrl) {
-          const ws = new globalThis.WebSocket(page.webSocketDebuggerUrl);
-          await new Promise(r => ws.onopen = r);
+        if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({
-            id: 1,
+            id: 999,
             method: 'Runtime.evaluate',
             params: {
               expression: `(() => {
-                const s = document.getElementById('antigravity-chat-rtl-style');
-                if (s) s.remove();
-                const m = document.getElementById('ag-appearance-modal');
-                if (m) m.remove();
-                const btn = document.getElementById('ag-appearance-menu-container');
-                if (btn) btn.remove();
+                document.getElementById('antigravity-chat-rtl-style')?.remove();
+                document.getElementById('ag-appearance-menu-container')?.remove();
+                document.querySelectorAll('[dir="rtl"]').forEach(el => el.removeAttribute('dir'));
                 document.body.classList.remove('ag-rtl-disabled');
                 window.__AG_RTL_DISABLED__ = true;
               })()`
@@ -55,7 +47,15 @@ export async function uninstall() {
 
   // 2. Remove files
   if (fs.existsSync(TARGET_DIR)) {
-    fs.rmSync(TARGET_DIR, { recursive: true, force: true });
+    try {
+      fs.rmSync(TARGET_DIR, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    } catch {
+      if (process.platform === 'win32') {
+        try {
+          execSync(`powershell -NoProfile -Command "Remove-Item -Path '${TARGET_DIR}' -Recurse -Force"`, { stdio: 'ignore' });
+        } catch {}
+      }
+    }
     console.log(`✅ Removed ${TARGET_DIR}`);
   } else {
     console.log(`ℹ️ ${PLUGIN_NAME} was not installed.`);
